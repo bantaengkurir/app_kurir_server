@@ -22,17 +22,15 @@ const index = async(req, res, _next) => {
 
         let payments;
 
-        if (currentUser.role == 'admin') {
-            payments = await PaymentModel.findAll({
-                include: [{
-                    model: OrderModel,
-                    as: "order",
 
-                }, ],
-            });
-        } else {
-            return res.status(403).send({ message: "role tidak valid" });
-        }
+        payments = await PaymentModel.findAll({
+            include: [{
+                model: OrderModel,
+                as: "order",
+
+            }, ],
+        });
+
 
         return res.send({
             message: "Success",
