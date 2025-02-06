@@ -58,6 +58,7 @@ const index = async(req, res, next) => {
                 total: parseFloat(order.total_price),
                 quantity: totalQuantity,
                 payment_method: order.payment_method,
+                payment_status: order.payment_status,
                 address: order.shipping_cost ? order.shipping_cost.address : null,
                 latitude: order.shipping_cost ? order.shipping_cost.latitude : null,
                 longitude: order.shipping_cost ? order.shipping_cost.longitude : null,
@@ -127,6 +128,197 @@ const reverseGeocode = async(latitude, longitude) => {
 
 
 
+// const create = async(req, res, next) => {
+//     const { items, payment_method, shipping_cost } = req.body;
+//     const { latitude, longitude } = shipping_cost || {};
+//     const currentUser = req.user;
+
+//     const idOrder = items.map((item) => item.product_id);
+
+//     if (idOrder.length === 0) {
+//         return res.status(400).send({ message: "Data tidak ditemukan" });
+//     }
+
+//     // if (!latitude || !longitude) {
+//     //     return res.status(400).send({ message: "Latitude dan Longitude wajib diisi" });
+//     // }
+
+//     if (!currentUser || !currentUser.id) {
+//         return res.status(401).send({ message: "User tidak terautentikasi" });
+//     }
+
+//     // Ambil produk beserta seller
+//     const products = await ProductModel.findAll({
+//         where: {
+//             id: idOrder,
+//         },
+//         include: [{
+//             model: UserModel,
+//             as: 'seller', // Pastikan alias ini sesuai dengan definisi di model
+//             attributes: ['id', 'latitude', 'longitude'] // Ambil latitude dan longitude seller
+//         }]
+//     });
+
+//     if (products.length !== idOrder.length) {
+//         return res.status(400).send({ message: "Satu atau lebih produk tidak ditemukan" });
+//     }
+
+//     // Mengambil lokasi seller dari produk pertama (asumsi semua seller memiliki lokasi yang sama)
+//     const sellerLocation = products[0].seller;
+//     if (!sellerLocation || !sellerLocation.latitude || !sellerLocation.longitude) {
+//         return res.status(400).send({ message: "Lokasi seller tidak ditemukan" });
+//     }
+
+//     let code;
+//     for (let i = 0; i < products.length; i++) {
+//         if (products[i].status === "makanan") {
+//             code = "01" + Math.floor(Math.random() * 1000000);
+//         } else if (products[i].status === "minuman") {
+//             code = "02" + Math.floor(Math.random() * 1000000);
+//         } else {
+//             code = "03" + Math.floor(Math.random() * 1000000);
+//         }
+//     }
+
+//     // Tambahkan logika untuk memilih courier_id
+//     const couriers = await UserModel.findAll({
+//         where: {
+//             role: "courier",
+//             status: "online",
+//         },
+//         attributes: ['id', 'latitude', 'longitude'] // Ambil hanya id, latitude, dan longitude
+//     });
+
+//     if (couriers.length === 0) {
+//         return res.status(400).send({ message: "Tidak ada courier yang tersedia" });
+//     }
+
+//     // Hitung jarak ke masing-masing courier dan temukan yang terdekat
+//     let closestCourier = null;
+//     let minDistance = Infinity;
+
+//     const getRoadDistance = async(origin, destination) => {
+//         const apiKey = process.env.API_KEY_GEOCODING_MAPS;
+//         const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.latitude},${origin.longitude}&destinations=${destination.latitude},${destination.longitude}&key=${apiKey}`;
+
+//         try {
+//             const response = await axios.get(url);
+//             if (response.data.rows[0].elements[0].status === "OK") {
+//                 const distanceInMeters = response.data.rows[0].elements[0].distance.value;
+//                 return distanceInMeters; // Jarak dalam meter
+//             }
+//             throw new Error("Jarak tidak ditemukan");
+//         } catch (error) {
+//             console.error("Error calculating road distance:", error.response ? error.response.data : error.message);
+//             throw new Error("Terjadi kesalahan saat menghitung jarak");
+//         }
+//     };
+
+
+//     for (const courier of couriers) {
+//         const courierDistance = geolib.getDistance({ latitude, longitude }, // Lokasi user
+//             { latitude: courier.latitude, longitude: courier.longitude } // Lokasi courier
+//         );
+
+//         if (courierDistance < minDistance) {
+//             minDistance = courierDistance;
+//             closestCourier = courier;
+//         }
+//     }
+
+//     // Jika courier ditemukan, gunakan id-nya sebagai courier_id
+//     if (!closestCourier) {
+//         return res.status(400).send({ message: "Tidak ada courier yang tersedia dalam jangkauan" });
+//     }
+
+//     const courier_id = closestCourier.id;
+
+//     const newOrder = await OrderModel.create({
+//         user_id: currentUser.id,
+//         courier_id,
+//         order_date: new Date(),
+//         payment_method,
+//         order_code: code,
+//     });
+
+//     let totalPrice = 0;
+
+//     const orderItems = items.map((item) => {
+//         const product = products.find((b) => b.id === item.product_id);
+//         const subtotal = product.price * item.quantity;
+//         totalPrice += subtotal;
+
+//         return {
+//             order_id: newOrder.id,
+//             courier_id: newOrder.courier_id,
+//             product_id: item.product_id,
+//             quantity: item.quantity,
+//             price: product.price,
+//             subtotal: subtotal,
+//         };
+//     });
+
+//     await OrderItemModel.bulkCreate(orderItems);
+
+//     await OrderModel.update({
+//         total_price: totalPrice,
+//         status: "Pending",
+//     }, {
+//         where: {
+//             id: newOrder.id,
+//         },
+//     });
+
+//     // Hitung jarak antara seller dan user
+//     const userLocation = { latitude, longitude };
+
+//     const distance = await getRoadDistance(userLocation, {
+//         latitude: sellerLocation.latitude,
+//         longitude: sellerLocation.longitude,
+//     });
+
+
+//     const address = await reverseGeocode(latitude, longitude);
+
+//     let shipping = 0;
+
+//     if (distance < 1000) {
+//         shipping = 5000
+//     } else {
+//         shipping = 5000 + distance * 1500 / 1000
+//     }
+
+
+//     // Lanjutkan membuat data pengiriman
+//     const newShipping = await ShippingModel.create({
+//         order_id: newOrder.id,
+//         address,
+//         latitude,
+//         longitude,
+//         distance, // Menyimpan jarak dalam meter
+//         shipping_cost: shipping,
+//     });
+
+
+//     return res.send({
+//         message: "Success",
+//         data: {
+//             order_id: newOrder.id,
+//             courier_id: newOrder.courier_id,
+//             total_price: totalPrice,
+//             courier: order.courier,
+//             items: orderItems.map((od) => ({
+//                 product_id: od.product_id,
+//                 quantity: od.quantity,
+//                 price: parseFloat(od.price),
+//                 subtotal: parseFloat(od.subtotal),
+//             })),
+//             shipping_cost: newShipping,
+//             // payment: newPayment,
+//         },
+//     });
+// };
+
 const create = async(req, res, next) => {
     const { items, payment_method, shipping_cost } = req.body;
     const { latitude, longitude } = shipping_cost || {};
@@ -137,10 +329,6 @@ const create = async(req, res, next) => {
     if (idOrder.length === 0) {
         return res.status(400).send({ message: "Data tidak ditemukan" });
     }
-
-    // if (!latitude || !longitude) {
-    //     return res.status(400).send({ message: "Latitude dan Longitude wajib diisi" });
-    // }
 
     if (!currentUser || !currentUser.id) {
         return res.status(401).send({ message: "User tidak terautentikasi" });
@@ -153,8 +341,8 @@ const create = async(req, res, next) => {
         },
         include: [{
             model: UserModel,
-            as: 'seller', // Pastikan alias ini sesuai dengan definisi di model
-            attributes: ['id', 'latitude', 'longitude'] // Ambil latitude dan longitude seller
+            as: 'seller',
+            attributes: ['id', 'latitude', 'longitude']
         }]
     });
 
@@ -162,12 +350,30 @@ const create = async(req, res, next) => {
         return res.status(400).send({ message: "Satu atau lebih produk tidak ditemukan" });
     }
 
-    // Mengambil lokasi seller dari produk pertama (asumsi semua seller memiliki lokasi yang sama)
-    const sellerLocation = products[0].seller;
-    if (!sellerLocation || !sellerLocation.latitude || !sellerLocation.longitude) {
-        return res.status(400).send({ message: "Lokasi seller tidak ditemukan" });
+    // Kelompokkan produk berdasarkan seller
+    const sellers = products.reduce((acc, product) => {
+        const sellerId = product.seller.id;
+        if (!acc[sellerId]) {
+            acc[sellerId] = {
+                seller: product.seller,
+                products: []
+            };
+        }
+        acc[sellerId].products.push(product);
+        return acc;
+    }, {});
+
+    const sellerGroups = Object.values(sellers);
+
+    // Validasi lokasi semua seller
+    for (const group of sellerGroups) {
+        const seller = group.seller;
+        if (!seller || !seller.latitude || !seller.longitude) {
+            return res.status(400).send({ message: "Lokasi seller tidak valid" });
+        }
     }
 
+    // Generate order code
     let code;
     for (let i = 0; i < products.length; i++) {
         if (products[i].status === "makanan") {
@@ -179,23 +385,20 @@ const create = async(req, res, next) => {
         }
     }
 
-    // Tambahkan logika untuk memilih courier_id
+    // Pilih kurir terdekat
     const couriers = await UserModel.findAll({
         where: {
             role: "courier",
             status: "online",
         },
-        attributes: ['id', 'latitude', 'longitude'] // Ambil hanya id, latitude, dan longitude
+        attributes: ['id', 'latitude', 'longitude']
     });
 
     if (couriers.length === 0) {
         return res.status(400).send({ message: "Tidak ada courier yang tersedia" });
     }
 
-    // Hitung jarak ke masing-masing courier dan temukan yang terdekat
-    let closestCourier = null;
-    let minDistance = Infinity;
-
+    // Fungsi hitung jarak jalan
     const getRoadDistance = async(origin, destination) => {
         const apiKey = process.env.API_KEY_GEOCODING_MAPS;
         const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.latitude},${origin.longitude}&destinations=${destination.latitude},${destination.longitude}&key=${apiKey}`;
@@ -203,45 +406,69 @@ const create = async(req, res, next) => {
         try {
             const response = await axios.get(url);
             if (response.data.rows[0].elements[0].status === "OK") {
-                const distanceInMeters = response.data.rows[0].elements[0].distance.value;
-                return distanceInMeters; // Jarak dalam meter
+                return response.data.rows[0].elements[0].distance.value;
             }
             throw new Error("Jarak tidak ditemukan");
         } catch (error) {
-            console.error("Error calculating road distance:", error.response ? error.response.data : error.message);
-            throw new Error("Terjadi kesalahan saat menghitung jarak");
+            console.error("Error calculating road distance:", error);
+            throw new Error("Gagal menghitung jarak");
         }
     };
 
+    // Hitung total jarak ke semua seller
+    let totalDistance = 0;
+    try {
+        const userLocation = { latitude, longitude };
+        const distancePromises = sellerGroups.map(async(group) => {
+            return await getRoadDistance(userLocation, {
+                latitude: group.seller.latitude,
+                longitude: group.seller.longitude
+            });
+        });
 
+        const distances = await Promise.all(distancePromises);
+        totalDistance = distances.reduce((sum, dist) => sum + dist, 0);
+    } catch (error) {
+        return res.status(500).send({ message: error.message });
+    }
+
+    // Hitung biaya pengiriman
+    let shipping = 0;
+    if (totalDistance <= 1000) {
+        shipping = 5000;
+    } else {
+        const additionalDistance = totalDistance - 1000;
+        const additionalKm = additionalDistance / 1000; // Pembulatan ke atas untuk km selanjutnya
+        shipping = 5000 + additionalKm * 1500;
+    }
+    shipping = Math.round(shipping);
+
+    // Pilih kurir terdekat ke user
+    let closestCourier = null;
+    let minDistance = Infinity;
     for (const courier of couriers) {
-        const courierDistance = geolib.getDistance({ latitude, longitude }, // Lokasi user
-            { latitude: courier.latitude, longitude: courier.longitude } // Lokasi courier
-        );
-
+        const courierDistance = geolib.getDistance({ latitude, longitude }, { latitude: courier.latitude, longitude: courier.longitude });
         if (courierDistance < minDistance) {
             minDistance = courierDistance;
             closestCourier = courier;
         }
     }
 
-    // Jika courier ditemukan, gunakan id-nya sebagai courier_id
     if (!closestCourier) {
-        return res.status(400).send({ message: "Tidak ada courier yang tersedia dalam jangkauan" });
+        return res.status(400).send({ message: "Tidak ada courier dalam jangkauan" });
     }
 
-    const courier_id = closestCourier.id;
-
+    // Buat order
     const newOrder = await OrderModel.create({
         user_id: currentUser.id,
-        courier_id,
+        courier_id: closestCourier.id,
         order_date: new Date(),
         payment_method,
         order_code: code,
     });
 
+    // Hitung total harga
     let totalPrice = 0;
-
     const orderItems = items.map((item) => {
         const product = products.find((b) => b.id === item.product_id);
         const subtotal = product.price * item.quantity;
@@ -263,41 +490,19 @@ const create = async(req, res, next) => {
         total_price: totalPrice,
         status: "Pending",
     }, {
-        where: {
-            id: newOrder.id,
-        },
+        where: { id: newOrder.id },
     });
 
-    // Hitung jarak antara seller dan user
-    const userLocation = { latitude, longitude };
-
-    const distance = await getRoadDistance(userLocation, {
-        latitude: sellerLocation.latitude,
-        longitude: sellerLocation.longitude,
-    });
-
-
+    // Buat data pengiriman
     const address = await reverseGeocode(latitude, longitude);
-
-    let shipping = 0;
-
-    if (distance < 1000) {
-        shipping = 5000
-    } else {
-        shipping = 5000 + distance * 1500 / 1000
-    }
-
-
-    // Lanjutkan membuat data pengiriman
     const newShipping = await ShippingModel.create({
         order_id: newOrder.id,
         address,
         latitude,
         longitude,
-        distance, // Menyimpan jarak dalam meter
+        distance: totalDistance,
         shipping_cost: shipping,
     });
-
 
     return res.send({
         message: "Success",
@@ -305,7 +510,6 @@ const create = async(req, res, next) => {
             order_id: newOrder.id,
             courier_id: newOrder.courier_id,
             total_price: totalPrice,
-            courier: order.courier,
             items: orderItems.map((od) => ({
                 product_id: od.product_id,
                 quantity: od.quantity,
@@ -313,7 +517,6 @@ const create = async(req, res, next) => {
                 subtotal: parseFloat(od.subtotal),
             })),
             shipping_cost: newShipping,
-            // payment: newPayment,
         },
     });
 };

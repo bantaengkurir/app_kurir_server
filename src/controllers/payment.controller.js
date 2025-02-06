@@ -83,13 +83,13 @@ const index = async(req, res, _next) => {
 
 //         // let payment_status = "pending"; // Nilai default
 //         if (payment_method == "COD") {
-//             payment_status = "paid";
+//             payment_status = "completed";
 //         } else if (payment_method == "transfer") {
 //             payment_status = "process";
 //         }
 
 
-//         if (order_id == order.order_id || order.status == 'process' || order.status == 'paid') {
+//         if (order_id == order.order_id || order.status == 'process' || order.status == 'completed') {
 //             return res.status(403).send({ message: `pembayaran dalam keadaan ${order.status}` });
 //         } else if (order.status == 'cancelled' || order.status == 'failed') {
 //             return res.status(403).send({ message: `pembayaran dalam keadaan ${order.status}` });
@@ -165,7 +165,7 @@ const createPayment = async(req, res) => {
 
         let payment_status = "pending"; // Nilai default
         if (payment_method == "COD") {
-            payment_status = "paid";
+            payment_status = "completed";
         } else if (payment_method == "transfer") {
             payment_status = "process";
         }
@@ -205,7 +205,7 @@ const createPayment = async(req, res) => {
         });
 
         // Proses update produk jika pembayaran berhasil
-        if (payment_status === "process" || payment_status === "paid") {
+        if (payment_status === "process" || payment_status === "completed") {
             // Ambil semua item dari order
             const orderItems = await OrderItemModel.findAll({
                 where: { order_id: order.id },
