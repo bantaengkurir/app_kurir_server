@@ -19,7 +19,14 @@ const index = async(req, res, next) => {
             include: [{
                     model: OrderModel,
                     as: "order",
-                    include: [{
+                    include: [
+                        // {
+
+                        //     model: UserModel,
+                        //     as: "seller"
+
+                        // },
+                        {
 
                             model: ShippingModel,
                             as: "shipping_cost"
@@ -57,103 +64,73 @@ const index = async(req, res, next) => {
 
         });
 
-        // const formattedOrders = order_histories
-        //     .map((order_history) => {
-        //         // Menghitung total quantity dari orderitem
-        //         const totalQuantity = order.orderitem.reduce((acc, item) => acc + item.quantity, 0);
-
-        //     return {
-        //         user_id: order.user_id,
-        //         order_id: order.id,
-        //         total: parseFloat(order.total_price),
-        //         quantity: totalQuantity,
-        //         payment_method: order.payment_method,
-        //         payment_status: order.payment_status,
-        //         address: order.shipping_cost ? order.shipping_cost.address : null,
-        //         latitude: order.shipping_cost ? order.shipping_cost.latitude : null,
-        //         longitude: order.shipping_cost ? order.shipping_cost.longitude : null,
-        //         distance: order.shipping_cost ? order.shipping_cost.distance : null,
-        //         created_at: order.created_at,
-        //         // courier: order.couriers,
-        //         courier: {
-        //             id: order.couriers.id,
-        //             name: order.couriers.name,
-        //             email: order.couriers.email,
-        //             phone_number: order.couriers.phone_number,
-        //             latitude: order.couriers.latitude,
-        //             longitude: order.couriers.longitude,
-        //             vehicle_type: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_type : null : null,
-        //             vehicle_plate: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_plate : null : null,
-        //         },
-        //         items: order.orderitem.map((item) => ({
-        //             product_id: item.product.id,
-        //             seller_id: item.product.seller_id,
-        //             name: item.product.name,
-        //             description: item.product.description,
-        //             image_url: item.product.image_url,
-        //             price: parseFloat(item.product.price),
-        //             stock: item.product.stock,
-        //             quantity: item.quantity,
-        //             seller_name: item.product.seller ? item.product.seller.name : null, // Perbaikan di sini
-        //             seller_phone_number: item.product.seller ? item.product.seller.phone_number : null, // Perbaikan di sini
-        //             seller_address: item.product.seller ? item.product.seller.address : null,
-        //             seller_profile_image: item.product.seller ? item.product.seller.profile_image : null,
-        //         })),
-        //         shipping_cost: order.shipping_cost,
-        //         // payment: order.payment,
-        //     };
-
         const formattedOrders = order_histories
-            // .map((order_history) => {
-            //     const order = order_history.order;
+            .map((order_history) => {
+                const order = order_history.order;
 
-        //     // Hitung total quantity dari orderitem
-        //     const totalQuantity = order.orderitem.reduce((acc, item) => acc + (item.quantity || 0), 0) || 0;
+                // Hitung total quantity dari orderitem
+                const totalQuantity = order.orderitem.reduce((acc, item) => acc + (item.quantity || 0), 0) || 0;
 
-        //     return {
-        //         // Data utama order
-        //         user_id: order_history.user_id,
-        //         order_id: order.id,
-        //         total: parseFloat(order.total_price || 0),
-        //         quantity: totalQuantity,
-        //         created_at: order.created_at,
+                return {
+                    // Data utama order
+                    user_id: order_history.user_id,
+                    order_id: order.id,
+                    courier_id: order.courier_id,
+                    status: order.status,
+                    payment_method: order.payment_method,
+                    payment_status: order.payment_status,
+                    order_code: order.order_code,
+                    order_date: order.order_date,
+                    total: parseFloat(order.total_price || 0),
+                    quantity: totalQuantity,
+                    created_at: order.created_at,
+                    courier: {
+                        id: order.couriers.id,
+                        name: order.couriers.name,
+                        email: order.couriers.email,
+                        profile_image: order.couriers.profile_image,
+                        phone_number: order.couriers.phone_number,
+                        latitude: order.couriers.latitude,
+                        longitude: order.couriers.longitude,
+                        vehicle_type: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_type : null : null,
+                        vehicle_plate: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_plate : null : null,
+                    },
+                    // Data pengiriman dari ShippingModel
+                    shipping_cost: order.shipping_cost && order.shipping_cost.length > 0 ? {
+                        address: order.shipping_cost[0].address, // Ambil data pertama dari array shipping_cost
+                        latitude: order.shipping_cost[0].latitude,
+                        longitude: order.shipping_cost[0].longitude,
+                        distance: order.shipping_cost[0].distance,
+                        shipping_cost: parseFloat(order.shipping_cost[0].shipping_cost || 0)
+                    } : null,
 
-        //         // Data pengiriman dari ShippingModel
-        //         shipping: order.shipping_cost,
-        //         // ? {
-        //         //     address: order.shipping_cost.address,
-        //         //     latitude: order.shipping_cost.latitude,
-        //         //     longitude: order.shipping_cost.longitude,
-        //         //     distance: order.shipping_cost.distance,
-        //         //     cost: parseFloat(order.shipping_cost.cost || 0)
-        //         // } : null,
+                    // Data pembayaran dari PaymentModel
+                    payment: order.payment && order.payment.length > 0 ? {
+                        payment_method: order.payment[0].payment_method, // Ambil data pertama dari array payment
+                        payment_status: order.payment[0].payment_status,
+                        amount: parseFloat(order.payment[0].amount || 0),
+                        payment_date: order.payment[0].payment_date
+                    } : null,
 
-        //         // Data pembayaran dari PaymentModel
-        //         payment: order.payment,
-        //         //  ? {
-        //         //     method: order.payment.method,
-        //         //     status: order.payment.status,
-        //         //     amount: parseFloat(order.payment.amount || 0),
-        //         //     transaction_date: order.payment.transaction_date
-        //         // } : null,
-
-        //         // Data produk dan penjual dari OrderItemModel
-        //         items: order.orderitem.map((item) => ({
-        //             product_id: item.product.id,
-        //             name: item.product.name,
-        //             price: parseFloat(item.product.price || 0),
-        //             quantity: item.quantity,
-
-        //             // Data penjual dari UserModel
-        //             seller: item.product.seller ? {
-        //                 seller_id: item.product.seller.id,
-        //                 name: item.product.seller.name,
-        //                 address: item.product.seller.address,
-        //                 phone_number: item.product.seller.phone_number
-        //             } : null
-        //         })) || []
-        //     };
-        // });
+                    // Data produk dan penjual dari OrderItemModel
+                    items: order.orderitem.map((item) => ({
+                        product_id: item.product.id,
+                        seller_id: item.product.seller.id,
+                        name: item.product.name,
+                        description: item.product.description,
+                        image_url: item.product.image_url,
+                        price: parseFloat(item.product.price),
+                        stock: item.product.stock,
+                        quantity: item.quantity,
+                        seller_name: item.product.seller ? item.product.seller.name : null, // Perbaikan di sini
+                        seller_phone_number: item.product.seller ? item.product.seller.phone_number : null, // Perbaikan di sini
+                        seller_address: item.product.seller ? item.product.seller.address : null,
+                        seller_latitude: item.product.seller ? item.product.seller.latitude : null,
+                        seller_longitude: item.product.seller ? item.product.seller.longitude : null,
+                        seller_profile_image: item.product.seller ? item.product.seller.profile_image : null,
+                    })) || []
+                };
+            });
         return res.send({
             message: "Success",
             data: formattedOrders,

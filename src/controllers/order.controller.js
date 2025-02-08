@@ -69,6 +69,7 @@ const index = async(req, res, next) => {
                     id: order.couriers.id,
                     name: order.couriers.name,
                     email: order.couriers.email,
+                    profile_image: order.couriers.profile_image,
                     phone_number: order.couriers.phone_number,
                     latitude: order.couriers.latitude,
                     longitude: order.couriers.longitude,
@@ -87,6 +88,8 @@ const index = async(req, res, next) => {
                     seller_name: item.product.seller ? item.product.seller.name : null, // Perbaikan di sini
                     seller_phone_number: item.product.seller ? item.product.seller.phone_number : null, // Perbaikan di sini
                     seller_address: item.product.seller ? item.product.seller.address : null,
+                    seller_latitude: item.product.seller ? item.product.seller.latitude : null,
+                    seller_longitude: item.product.seller ? item.product.seller.longitude : null,
                     seller_profile_image: item.product.seller ? item.product.seller.profile_image : null,
                 })),
                 shipping_cost: order.shipping_cost,

@@ -814,7 +814,7 @@ app.use('/api/order_histories', order_historieRouter);
 app.use(bodyParser.json());
 
 // **Port Listening**
-const PORT = process.env.SERVER_PORT || 8000;
+const PORT = process.env.SERVER_PORT || 8001;
 server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
