@@ -19,13 +19,12 @@ const index = async(req, res, next) => {
             include: [{
                     model: OrderModel,
                     as: "order",
-                    include: [
-                        // {
+                    include: [{
 
-                        //     model: UserModel,
-                        //     as: "seller"
+                            model: UserModel,
+                            as: "user"
 
-                        // },
+                        },
                         {
 
                             model: ShippingModel,

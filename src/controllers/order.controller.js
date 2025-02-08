@@ -3,6 +3,7 @@ const { courier: CourierModel, user: UserModel, order: OrderModel, product: Prod
 const axios = require('axios');
 const order = require("../models/order");
 const geolib = require('geolib');
+const { io } = require("../config/socket"); // Import WebSocket server
 
 /**
  * @param {import("express").Request} req
@@ -130,197 +131,6 @@ const reverseGeocode = async(latitude, longitude) => {
 };
 
 
-
-// const create = async(req, res, next) => {
-//     const { items, payment_method, shipping_cost } = req.body;
-//     const { latitude, longitude } = shipping_cost || {};
-//     const currentUser = req.user;
-
-//     const idOrder = items.map((item) => item.product_id);
-
-//     if (idOrder.length === 0) {
-//         return res.status(400).send({ message: "Data tidak ditemukan" });
-//     }
-
-//     // if (!latitude || !longitude) {
-//     //     return res.status(400).send({ message: "Latitude dan Longitude wajib diisi" });
-//     // }
-
-//     if (!currentUser || !currentUser.id) {
-//         return res.status(401).send({ message: "User tidak terautentikasi" });
-//     }
-
-//     // Ambil produk beserta seller
-//     const products = await ProductModel.findAll({
-//         where: {
-//             id: idOrder,
-//         },
-//         include: [{
-//             model: UserModel,
-//             as: 'seller', // Pastikan alias ini sesuai dengan definisi di model
-//             attributes: ['id', 'latitude', 'longitude'] // Ambil latitude dan longitude seller
-//         }]
-//     });
-
-//     if (products.length !== idOrder.length) {
-//         return res.status(400).send({ message: "Satu atau lebih produk tidak ditemukan" });
-//     }
-
-//     // Mengambil lokasi seller dari produk pertama (asumsi semua seller memiliki lokasi yang sama)
-//     const sellerLocation = products[0].seller;
-//     if (!sellerLocation || !sellerLocation.latitude || !sellerLocation.longitude) {
-//         return res.status(400).send({ message: "Lokasi seller tidak ditemukan" });
-//     }
-
-//     let code;
-//     for (let i = 0; i < products.length; i++) {
-//         if (products[i].status === "makanan") {
-//             code = "01" + Math.floor(Math.random() * 1000000);
-//         } else if (products[i].status === "minuman") {
-//             code = "02" + Math.floor(Math.random() * 1000000);
-//         } else {
-//             code = "03" + Math.floor(Math.random() * 1000000);
-//         }
-//     }
-
-//     // Tambahkan logika untuk memilih courier_id
-//     const couriers = await UserModel.findAll({
-//         where: {
-//             role: "courier",
-//             status: "online",
-//         },
-//         attributes: ['id', 'latitude', 'longitude'] // Ambil hanya id, latitude, dan longitude
-//     });
-
-//     if (couriers.length === 0) {
-//         return res.status(400).send({ message: "Tidak ada courier yang tersedia" });
-//     }
-
-//     // Hitung jarak ke masing-masing courier dan temukan yang terdekat
-//     let closestCourier = null;
-//     let minDistance = Infinity;
-
-//     const getRoadDistance = async(origin, destination) => {
-//         const apiKey = process.env.API_KEY_GEOCODING_MAPS;
-//         const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.latitude},${origin.longitude}&destinations=${destination.latitude},${destination.longitude}&key=${apiKey}`;
-
-//         try {
-//             const response = await axios.get(url);
-//             if (response.data.rows[0].elements[0].status === "OK") {
-//                 const distanceInMeters = response.data.rows[0].elements[0].distance.value;
-//                 return distanceInMeters; // Jarak dalam meter
-//             }
-//             throw new Error("Jarak tidak ditemukan");
-//         } catch (error) {
-//             console.error("Error calculating road distance:", error.response ? error.response.data : error.message);
-//             throw new Error("Terjadi kesalahan saat menghitung jarak");
-//         }
-//     };
-
-
-//     for (const courier of couriers) {
-//         const courierDistance = geolib.getDistance({ latitude, longitude }, // Lokasi user
-//             { latitude: courier.latitude, longitude: courier.longitude } // Lokasi courier
-//         );
-
-//         if (courierDistance < minDistance) {
-//             minDistance = courierDistance;
-//             closestCourier = courier;
-//         }
-//     }
-
-//     // Jika courier ditemukan, gunakan id-nya sebagai courier_id
-//     if (!closestCourier) {
-//         return res.status(400).send({ message: "Tidak ada courier yang tersedia dalam jangkauan" });
-//     }
-
-//     const courier_id = closestCourier.id;
-
-//     const newOrder = await OrderModel.create({
-//         user_id: currentUser.id,
-//         courier_id,
-//         order_date: new Date(),
-//         payment_method,
-//         order_code: code,
-//     });
-
-//     let totalPrice = 0;
-
-//     const orderItems = items.map((item) => {
-//         const product = products.find((b) => b.id === item.product_id);
-//         const subtotal = product.price * item.quantity;
-//         totalPrice += subtotal;
-
-//         return {
-//             order_id: newOrder.id,
-//             courier_id: newOrder.courier_id,
-//             product_id: item.product_id,
-//             quantity: item.quantity,
-//             price: product.price,
-//             subtotal: subtotal,
-//         };
-//     });
-
-//     await OrderItemModel.bulkCreate(orderItems);
-
-//     await OrderModel.update({
-//         total_price: totalPrice,
-//         status: "Pending",
-//     }, {
-//         where: {
-//             id: newOrder.id,
-//         },
-//     });
-
-//     // Hitung jarak antara seller dan user
-//     const userLocation = { latitude, longitude };
-
-//     const distance = await getRoadDistance(userLocation, {
-//         latitude: sellerLocation.latitude,
-//         longitude: sellerLocation.longitude,
-//     });
-
-
-//     const address = await reverseGeocode(latitude, longitude);
-
-//     let shipping = 0;
-
-//     if (distance < 1000) {
-//         shipping = 5000
-//     } else {
-//         shipping = 5000 + distance * 1500 / 1000
-//     }
-
-
-//     // Lanjutkan membuat data pengiriman
-//     const newShipping = await ShippingModel.create({
-//         order_id: newOrder.id,
-//         address,
-//         latitude,
-//         longitude,
-//         distance, // Menyimpan jarak dalam meter
-//         shipping_cost: shipping,
-//     });
-
-
-//     return res.send({
-//         message: "Success",
-//         data: {
-//             order_id: newOrder.id,
-//             courier_id: newOrder.courier_id,
-//             total_price: totalPrice,
-//             courier: order.courier,
-//             items: orderItems.map((od) => ({
-//                 product_id: od.product_id,
-//                 quantity: od.quantity,
-//                 price: parseFloat(od.price),
-//                 subtotal: parseFloat(od.subtotal),
-//             })),
-//             shipping_cost: newShipping,
-//             // payment: newPayment,
-//         },
-//     });
-// };
 
 const create = async(req, res, next) => {
     const { items, payment_method, shipping_cost } = req.body;
@@ -506,6 +316,14 @@ const create = async(req, res, next) => {
         distance: totalDistance,
         shipping_cost: shipping,
     });
+
+    // Buka koneksi WebSocket untuk customer dan kurir
+    io.emit("orderCreated", {
+        orderId: newOrder.id,
+        customerId: currentUser.id,
+        courierId: closestCourier.id,
+    });
+
 
     return res.send({
         message: "Success",
@@ -698,5 +516,39 @@ const updateStatus = async(req, res, next) => {
     }
 };
 
+/**
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} next
+ */
+const updateCourierLocation = async(req, res, next) => {
+    const { latitude, longitude } = req.body;
+    const courierId = req.user.id; // ID kurir yang sedang login
+    const { orderId } = req.params
 
-module.exports = { index, create, getOrderById, cancelOrder, updateStatus };
+    try {
+        // Validasi data
+        if (!latitude || !longitude) {
+            return res.status(400).send({ message: "Order ID, latitude, dan longitude harus diisi" });
+        }
+
+        // Update lokasi kurir di database
+        await UserModel.update({ latitude, longitude }, { where: { id: courierId } });
+
+        // Kirim update lokasi ke customer melalui WebSocket
+        io.emit("locationUpdated", {
+            orderId,
+            courierId,
+            latitude,
+            longitude,
+        });
+
+        return res.send({ message: "Lokasi kurir berhasil diperbarui" });
+    } catch (error) {
+        console.error("Error updating courier location:", error);
+        return res.status(500).send({ message: "Terjadi kesalahan saat memperbarui lokasi kurir" });
+    }
+};
+
+
+module.exports = { index, create, getOrderById, cancelOrder, updateStatus, updateCourierLocation };
