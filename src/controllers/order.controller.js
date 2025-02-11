@@ -521,6 +521,7 @@ const updateStatus = async(req, res, next) => {
  * @param {import("express").Response} res
  * @param {import("express").NextFunction} next
  */
+
 const updateCourierLocation = async(req, res, next) => {
     const { latitude, longitude } = req.body;
     const courierId = req.user.id; // ID kurir yang sedang login
@@ -534,11 +535,13 @@ const updateCourierLocation = async(req, res, next) => {
 
         // Update lokasi kurir di database
         await UserModel.update({ latitude, longitude }, { where: { id: courierId } });
+        const address = await reverseGeocode(latitude, longitude);
 
         // Kirim update lokasi ke customer melalui WebSocket
         io.emit("locationUpdated", {
             orderId,
             courierId,
+            address,
             latitude,
             longitude,
         });
