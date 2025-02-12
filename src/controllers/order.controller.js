@@ -1,4 +1,4 @@
-const { courier: CourierModel, user: UserModel, order: OrderModel, product: ProductModel, orderitem: OrderItemModel, shipping_cost: ShippingModel, payment: PaymentModel } = require("../models");
+const { courier: CourierModel, user: UserModel, order: OrderModel, product: ProductModel, orderitem: OrderItemModel, shipping_cost: ShippingModel, payment: PaymentModel, order_historie: HistoryModel } = require("../models");
 
 const axios = require('axios');
 const order = require("../models/order");
@@ -77,6 +77,7 @@ const index = async(req, res, next) => {
                     vehicle_type: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_type : null : null,
                     vehicle_plate: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_plate : null : null,
                 },
+
                 items: order.orderitem.map((item) => ({
                     product_id: item.product.id,
                     seller_id: item.product.seller_id,
@@ -371,6 +372,10 @@ const getOrderById = async(req, res, next) => {
                     as: "payment",
                 },
                 {
+                    model: HistoryModel,
+                    as: "order_historie",
+                },
+                {
                     model: OrderItemModel,
                     as: "orderitem",
                     include: [{
@@ -415,6 +420,18 @@ const getOrderById = async(req, res, next) => {
                 vehicle_type: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_type : null : null,
                 vehicle_plate: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_plate : null : null,
             },
+            order_history: order.order_historie.map((history) => ({
+                id: history.id,
+                order_id: history.order_id,
+                user_id: history.user_id,
+                status: history.status,
+                note: history.note,
+                created_at: history.createdAt,
+                // latitude: history.order_historie.latitude,
+                // longitude: history.order_historie.longitude,
+                // vehicle_type: history.order_historie.courier ? history.order_historie.courier.length > 0 ? history.order_historie.courier[0].vehicle_type : null : null,
+                // vehicle_plate: history.order_historie.courier ? history.order_historie.courier.length > 0 ? history.order_historie.courier[0].vehicle_plate : null : null,
+            })),
             items: order.orderitem
                 .map((item) => ({
                     product_id: item.product.id,
@@ -525,7 +542,7 @@ const updateStatus = async(req, res, next) => {
 const updateCourierLocation = async(req, res, next) => {
     const { latitude, longitude } = req.body;
     const courierId = req.user.id; // ID kurir yang sedang login
-    const { orderId } = req.params
+    // const { orderId } = req.params
 
     try {
         // Validasi data
@@ -539,7 +556,7 @@ const updateCourierLocation = async(req, res, next) => {
 
         // Kirim update lokasi ke customer melalui WebSocket
         io.emit("locationUpdated", {
-            orderId,
+            // orderId,
             courierId,
             address,
             latitude,

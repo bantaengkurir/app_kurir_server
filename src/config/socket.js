@@ -1,75 +1,75 @@
-const { Server } = require("socket.io");
-const http = require("http");
-const express = require("express");
-const { user: UserModel } = require("../models"); // Import model User dari Sequelize
+// const { Server } = require("socket.io");
+// const http = require("http");
+// const express = require("express");
+// const { user: UserModel } = require("../models"); // Import model User dari Sequelize
 
-const app = express();
-const server = http.createServer(app);
+// const app = express();
+// const server = http.createServer(app);
 
-const io = new Server(server, {
-    cors: {
-        origin: ["http://localhost:5173"],
-        credentials: true,
-        transports: ['websocket', 'polling'] // Tambahkan opsi transports
-    },
-});
+// const io = new Server(server, {
+//     cors: {
+//         origin: ["http://localhost:5173"],
+//         credentials: true,
+//         transports: ['websocket', 'polling'] // Tambahkan opsi transports
+//     },
+// });
 
-// used to store online users
-const userSocketMap = {}; // {userId: socketId}
+// // used to store online users
+// const userSocketMap = {}; // {userId: socketId}
 
-function getReceiverSocketId(userId) {
-    return userSocketMap[userId];
-}
+// function getReceiverSocketId(userId) {
+//     return userSocketMap[userId];
+// }
 
-// Function to get online users
-function getOnlineUsers() {
-    return Object.keys(userSocketMap); // Return an array of userIds
-}
+// // Function to get online users
+// function getOnlineUsers() {
+//     return Object.keys(userSocketMap); // Return an array of userIds
+// }
 
-io.on("connection", async(socket) => {
-    console.log("A user connected", socket.id);
+// io.on("connection", async(socket) => {
+//     console.log("A user connected", socket.id);
 
-    const userId = socket.handshake.query.userId;
-    if (userId) {
-        userSocketMap[userId] = socket.id;
+//     const userId = socket.handshake.query.userId;
+//     if (userId) {
+//         userSocketMap[userId] = socket.id;
 
-        // Update status user menjadi "online" di database
-        try {
-            await UserModel.update({ status: "online" }, // Set status menjadi "online"
-                { where: { id: userId } } // Filter berdasarkan userId
-            );
-            console.log(`User ${userId} is now online`);
-        } catch (error) {
-            console.error("Error updating user status to online:", error);
-        }
-    }
+//         // Update status user menjadi "online" di database
+//         try {
+//             await UserModel.update({ status: "online" }, // Set status menjadi "online"
+//                 { where: { id: userId } } // Filter berdasarkan userId
+//             );
+//             console.log(`User ${userId} is now online`);
+//         } catch (error) {
+//             console.error("Error updating user status to online:", error);
+//         }
+//     }
 
-    // Kirim daftar pengguna online ke semua klien
-    io.emit("getOnlineUsers", getOnlineUsers());
+//     // Kirim daftar pengguna online ke semua klien
+//     io.emit("getOnlineUsers", getOnlineUsers());
 
-    socket.on("disconnect", async() => {
-        console.log("A user disconnected", socket.id);
+//     socket.on("disconnect", async() => {
+//         console.log("A user disconnected", socket.id);
 
-        if (userId) {
-            delete userSocketMap[userId];
+//         if (userId) {
+//             delete userSocketMap[userId];
 
-            // Update status user menjadi "offline" di database
-            try {
-                await UserModel.update({ status: "offline" }, // Set status menjadi "offline"
-                    { where: { id: userId } } // Filter berdasarkan userId
-                );
-                console.log(`User ${userId} is now offline`);
-            } catch (error) {
-                console.error("Error updating user status to offline:", error);
-            }
-        }
+//             // Update status user menjadi "offline" di database
+//             try {
+//                 await UserModel.update({ status: "offline" }, // Set status menjadi "offline"
+//                     { where: { id: userId } } // Filter berdasarkan userId
+//                 );
+//                 console.log(`User ${userId} is now offline`);
+//             } catch (error) {
+//                 console.error("Error updating user status to offline:", error);
+//             }
+//         }
 
-        // Kirim daftar pengguna online yang diperbarui ke semua klien
-        io.emit("getOnlineUsers", getOnlineUsers());
-    });
-});
+//         // Kirim daftar pengguna online yang diperbarui ke semua klien
+//         io.emit("getOnlineUsers", getOnlineUsers());
+//     });
+// });
 
-module.exports = { io, app, server, getReceiverSocketId, getOnlineUsers };
+// module.exports = { io, app, server, getReceiverSocketId, getOnlineUsers };
 
 
 // // const { Server } = require("socket.io");
@@ -392,3 +392,123 @@ module.exports = { io, app, server, getReceiverSocketId, getOnlineUsers };
 // });
 
 // module.exports = { io, app, server, getReceiverSocketId, getOnlineUsers };
+
+const { Server } = require("socket.io");
+const http = require("http");
+const express = require("express");
+const { user: UserModel } = require("../models");
+
+const app = express();
+const server = http.createServer(app);
+
+const io = new Server(server, {
+    cors: {
+        origin: ["http://localhost:5173"],
+        credentials: true,
+        transports: ['websocket', 'polling']
+    },
+});
+
+const userSocketMap = {};
+
+function getReceiverSocketId(userId) {
+    return userSocketMap[userId];
+}
+
+function getOnlineUsers() {
+    return Object.keys(userSocketMap);
+}
+
+io.on("connection", async(socket) => {
+    console.log("A user connected", socket.id);
+
+    const userId = socket.handshake.query.userId;
+    if (userId) {
+        userSocketMap[userId] = socket.id;
+
+        try {
+            // Update status ke online
+            await UserModel.update({ status: "online" }, { where: { id: userId } });
+            console.log(`User ${userId} is now online`);
+
+            // Cek apakah user adalah courier
+            const user = await UserModel.findByPk(userId);
+            if (user && user.role === "courier") {
+                // Minta lokasi ke client jika data lokasi masih kosong
+                if (!user.address || !user.latitude || !user.longitude) {
+                    socket.emit("requestLocation");
+                }
+
+                // Setup interval untuk update lokasi berkala
+                const locationInterval = setInterval(async() => {
+                    const updatedUser = await UserModel.findByPk(userId);
+                    if (updatedUser && updatedUser.role === "courier") {
+                        socket.emit("requestLocationUpdate");
+                    }
+                }, 30000); // Update setiap 30 detik
+
+                // Simpan interval di socket
+                socket.locationInterval = locationInterval;
+            }
+        } catch (error) {
+            console.error("Error updating user status to online:", error);
+        }
+    }
+
+    // Terima data lokasi dari client
+    socket.on("updateLocation", async(locationData) => {
+        try {
+            if (!userId) return;
+
+            const user = await UserModel.findByPk(userId);
+            if (!user || user.role !== "courier") return;
+
+            // Update lokasi di database
+            await UserModel.update({
+                address: locationData.address,
+                latitude: locationData.latitude,
+                longitude: locationData.longitude,
+                last_location_update: new Date()
+            }, { where: { id: userId } });
+
+            console.log(`Lokasi courier ${userId} diperbarui`);
+
+            // Broadcast ke semua client yang perlu tahu
+            io.emit("courierLocationUpdated", {
+                userId,
+                ...locationData,
+                timestamp: new Date()
+            });
+
+        } catch (error) {
+            console.error("Gagal update lokasi courier:", error);
+        }
+    });
+
+    // Kirim daftar pengguna online
+    io.emit("getOnlineUsers", getOnlineUsers());
+
+    socket.on("disconnect", async() => {
+        console.log("A user disconnected", socket.id);
+
+        if (userId) {
+            delete userSocketMap[userId];
+
+            try {
+                await UserModel.update({ status: "offline" }, { where: { id: userId } });
+                console.log(`User ${userId} is now offline`);
+
+                // Hentikan interval lokasi jika user adalah courier
+                if (socket.locationInterval) {
+                    clearInterval(socket.locationInterval);
+                }
+            } catch (error) {
+                console.error("Error updating user status to offline:", error);
+            }
+        }
+
+        io.emit("getOnlineUsers", getOnlineUsers());
+    });
+});
+
+module.exports = { io, app, server, getReceiverSocketId, getOnlineUsers };

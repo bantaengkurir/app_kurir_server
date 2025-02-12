@@ -9,7 +9,7 @@ const { index, create, getOrderById, cancelOrder, updateStatus, updateCourierLoc
 router.get("/", validateToken, index);
 router.get("/:orderId", validateToken, getOrderById);
 router.put("/:orderId/status", validateToken, updateStatus);
-router.put("/:orderId/update-location", validateToken, updateStatus);
+router.put("/update-location", validateToken, updateStatus);
 router.post("/", validateToken, create);
 router.put("/:orderId/cancel", validateToken, cancelOrder);
 
