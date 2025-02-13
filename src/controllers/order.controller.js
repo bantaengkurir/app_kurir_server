@@ -20,7 +20,7 @@ const index = async(req, res, next) => {
             include: [{
                     model: UserModel,
                     as: "couriers",
-                    attributes: ["id", "name", "email", "phone_number", "latitude", "longitude"],
+                    attributes: ["id", "name", "email", "profile_image", "phone_number", "latitude", "longitude"],
                     include: [{
                         model: CourierModel,
                         as: "courier"
@@ -58,6 +58,8 @@ const index = async(req, res, next) => {
                 order_id: order.id,
                 total: parseFloat(order.total_price),
                 quantity: totalQuantity,
+                order_code: order.order_code,
+                order_date: order.order_date,
                 payment_method: order.payment_method,
                 payment_status: order.payment_status,
                 address: order.shipping_cost ? order.shipping_cost.address : null,
@@ -415,6 +417,7 @@ const getOrderById = async(req, res, next) => {
                 name: order.couriers.name,
                 email: order.couriers.email,
                 phone_number: order.couriers.phone_number,
+                profile_image: order.couriers.profile_image,
                 latitude: order.couriers.latitude,
                 longitude: order.couriers.longitude,
                 vehicle_type: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_type : null : null,
