@@ -163,7 +163,7 @@ const createPayment = async(req, res) => {
 
         let payment_status = "pending"; // Nilai default
         if (payment_method == "COD") {
-            payment_status = "completed";
+            payment_status = "process";
         } else if (payment_method == "transfer") {
             payment_status = "process";
         }
@@ -174,12 +174,23 @@ const createPayment = async(req, res) => {
         //     return res.status(403).send({ message: `pembayaran dalam keadaan ${payment_status}` });
         // }
 
-        await OrderHistoryModel.create({
-            order_id,
-            user_id: currentUser,
-            status: payment_status,
-            note: `Pembayaran dalam keadaan ${payment_status}`,
-        });
+        if (payment_method == 'COD') {
+
+
+            await OrderHistoryModel.create({
+                order_id,
+                user_id: currentUser,
+                status: payment_status,
+                note: `Lakukan pembayaran setelah barang diterima`,
+            });
+        } else {
+            await OrderHistoryModel.create({
+                order_id,
+                user_id: currentUser,
+                status: payment_status,
+                note: `Pembayaran dalam keadaan ${payment_status}`,
+            });
+        }
 
         // Buat data pembayaran
         const payment = await PaymentModel.create({

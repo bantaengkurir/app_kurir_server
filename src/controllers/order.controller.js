@@ -60,6 +60,7 @@ const index = async(req, res, next) => {
                 quantity: totalQuantity,
                 order_code: order.order_code,
                 order_date: order.order_date,
+                status: order.status,
                 payment_method: order.payment_method,
                 payment_status: order.payment_status,
                 address: order.shipping_cost ? order.shipping_cost.address : null,
@@ -516,6 +517,7 @@ const cancelOrder = async(req, res, next) => {
 const updateStatus = async(req, res, next) => {
     const { orderId } = req.params;
     const { status } = req.body;
+    const currentUser = req.user.id;
 
     try {
         const order = await OrderModel.findByPk(orderId);
@@ -529,6 +531,13 @@ const updateStatus = async(req, res, next) => {
         }
 
         await OrderModel.update({ status }, { where: { id: orderId } });
+
+        await HistoryModel.create({
+            order_id: orderId,
+            user_id: currentUser,
+            status,
+            note: `Orderan dalam keadaan ${status}`,
+        });
 
         return res.send({ message: "Order status updated successfully" });
     } catch (error) {

@@ -69,11 +69,11 @@ module.exports = (sequelize, DataTypes) => {
             })
             user.hasMany(models.message, {
                 foreignKey: "sender_id",
-                as: "sender_message"
+                as: "sender"
             })
             user.hasMany(models.message, {
                 foreignKey: "receiver_id",
-                as: "receiver_message"
+                as: "receiver"
             })
             user.hasMany(models.payment, {
                 foreignKey: "user_id",

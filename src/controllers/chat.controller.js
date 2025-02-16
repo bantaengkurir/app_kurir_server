@@ -695,6 +695,41 @@ const { getReceiverSocketId, io } = require("../config/socket.js"); // Impor dar
 const { getOnlineUsers } = require("../config/socket"); // Import fungsi dari config/socket.js
 const { Op } = require("sequelize");
 
+// const getUsersForSidebar = async(req, res) => {
+//     try {
+//         const loggedInUserId = req.user.id;
+
+//         // Ambil semua pengguna kecuali yang sedang login
+//         const allUsers = await User.findAll({
+//             where: {
+//                 id: {
+//                     [Op.ne]: loggedInUserId,
+//                 },
+//             },
+//             attributes: { exclude: ["password"] }, // Kecualikan kolom password
+//         });
+
+//         // Ambil daftar kurir yang online dari socket.io
+//         const onlineUsers = getOnlineUsers();
+
+//         // Tandai pengguna yang online
+//         const usersWithOnlineStatus = allUsers.map(user => {
+//             // Cek apakah user ini adalah kurir dan apakah mereka online
+//             const isOnline = onlineUsers.some(user => user === user.id); // Pastikan ID pengguna ada dalam daftar onlineUsers
+//             return {
+//                 ...user.toJSON(),
+//                 isOnline, // Tambahkan status online
+//             };
+//         });
+
+//         res.status(200).json(usersWithOnlineStatus);
+//         console.log("Users with online status:", usersWithOnlineStatus);
+//     } catch (error) {
+//         console.error("Error in getUsersForSidebar:", error.message);
+//         res.status(500).json({ error: "Internal server error" });
+//     }
+// };
+
 const getUsersForSidebar = async(req, res) => {
     try {
         const loggedInUserId = req.user.id;
@@ -709,13 +744,44 @@ const getUsersForSidebar = async(req, res) => {
             attributes: { exclude: ["password"] }, // Kecualikan kolom password
         });
 
-        // Ambil daftar kurir yang online dari socket.io
+        // Ambil semua pesan yang melibatkan pengguna yang sedang login
+        const messages = await Message.findAll({
+            where: {
+                [Op.or]: [
+                    { sender_id: loggedInUserId }, // Pesan yang dikirim oleh pengguna yang sedang login
+                    { receiver_id: loggedInUserId }, // Pesan yang diterima oleh pengguna yang sedang login
+                ],
+            },
+            include: [{
+                    model: User,
+                    as: 'sender', // Gunakan alias yang sesuai
+                },
+                {
+                    model: User,
+                    as: 'receiver', // Gunakan alias yang sesuai
+                },
+            ],
+        });
+
+        // Buat daftar ID pengguna yang memiliki chat dengan pengguna yang sedang login
+        const userIdsWithChat = new Set();
+        messages.forEach(message => {
+            if (message.sender_id === loggedInUserId) {
+                userIdsWithChat.add(message.receiver_id); // Tambahkan ID penerima
+            } else {
+                userIdsWithChat.add(message.sender_id); // Tambahkan ID pengirim
+            }
+        });
+
+        // Filter pengguna yang memiliki chat dengan pengguna yang sedang login
+        const usersWithChat = allUsers.filter(user => userIdsWithChat.has(user.id));
+
+        // Ambil daftar pengguna yang online dari socket.io
         const onlineUsers = getOnlineUsers();
 
         // Tandai pengguna yang online
-        const usersWithOnlineStatus = allUsers.map(user => {
-            // Cek apakah user ini adalah kurir dan apakah mereka online
-            const isOnline = onlineUsers.some(user => user === user.id); // Pastikan ID pengguna ada dalam daftar onlineUsers
+        const usersWithOnlineStatus = usersWithChat.map(user => {
+            const isOnline = onlineUsers.some(onlineUser => onlineUser === user.id);
             return {
                 ...user.toJSON(),
                 isOnline, // Tambahkan status online
@@ -723,12 +789,14 @@ const getUsersForSidebar = async(req, res) => {
         });
 
         res.status(200).json(usersWithOnlineStatus);
-        console.log("Users with online status:", usersWithOnlineStatus);
+        console.log("Users with chat and online status:", usersWithOnlineStatus);
     } catch (error) {
         console.error("Error in getUsersForSidebar:", error.message);
         res.status(500).json({ error: "Internal server error" });
     }
 };
+
+
 
 const getMessages = async(req, res) => {
     try {
@@ -789,7 +857,7 @@ const sendMessage = async(req, res) => {
 
         res.status(201).json(newMessage);
     } catch (error) {
-        console.error("Error in sendMessage controller: ", error.message);
+        console.error("Error in sendMessage controller: ", error);
         res.status(500).json({ error: "Internal server error" });
     }
 };
