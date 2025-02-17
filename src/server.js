@@ -778,6 +778,7 @@ const { io, app, server } = require("./config/socket"); // Impor dari socket.js
 
 // Routes
 const authRouter = require('./routes/auth.router');
+const userRouter = require('./routes/user.router');
 const productRouter = require('./routes/product.router');
 const orderRouter = require('./routes/order.router');
 const cartRouter = require('./routes/cart.router');
@@ -804,6 +805,7 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/api/auth', authRouter);
+app.use('/api/couriers', userRouter);
 app.use('/api/products', productRouter);
 app.use('/api/orders', orderRouter);
 app.use('/api/carts', cartRouter);
