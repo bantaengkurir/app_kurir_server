@@ -9,6 +9,9 @@ module.exports = {
                 primaryKey: true,
                 type: Sequelize.INTEGER
             },
+            order_id: {
+                type: Sequelize.INTEGER
+            },
             courier_id: {
                 type: Sequelize.INTEGER
             },
@@ -20,6 +23,11 @@ module.exports = {
             },
             review: {
                 type: Sequelize.TEXT
+            },
+            rating_time: {
+                allowNull: false,
+                defaultValue: Sequelize.fn("NOW"),
+                type: Sequelize.DATE
             },
             created_at: {
                 allowNull: false,

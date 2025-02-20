@@ -1,4 +1,17 @@
-const { courier: CourierModel, user: UserModel, order: OrderModel, product: ProductModel, orderitem: OrderItemModel, shipping_cost: ShippingModel, payment: PaymentModel, order_historie: HistoryModel } = require("../models");
+const {
+    courier: CourierModel,
+    user: UserModel,
+    order: OrderModel,
+    product: ProductModel,
+    orderitem: OrderItemModel,
+    shipping_cost: ShippingModel,
+    payment: PaymentModel,
+    order_historie: HistoryModel,
+    review: ReviewModel,
+    courier_rating: CourierRatingModel,
+} = require("../models");
+
+const { sequelize } = require('../models');
 
 const axios = require('axios');
 const order = require("../models/order");
@@ -494,7 +507,7 @@ const cancelOrder = async(req, res, next) => {
             await product.save();
         }
 
-        await OrderModel.update({ status: "cancelled" }, { where: { id: orderId } });
+        await OrderModel.update({ status: "cancelled", payment_status: "cancelled" }, { where: { id: orderId } });
 
         // Periksa apakah pembaruan berhasil
         const updatedOrder = await OrderModel.findByPk(orderId);
@@ -509,6 +522,43 @@ const cancelOrder = async(req, res, next) => {
 
 
 
+// /**
+//  * @param {import("express").Request} req
+//  * @param {import("express").Response} res
+//  * @param {import("express").NextFunction} next
+//  */
+// const updateStatus = async(req, res, next) => {
+//     const { orderId } = req.params;
+//     const { status } = req.body;
+//     const currentUser = req.user.id;
+
+//     try {
+//         const order = await OrderModel.findByPk(orderId);
+
+//         if (!order) {
+//             return res.status(404).send({ message: "Order not found" });
+//         }
+
+//         if (order.status == "cancelled") {
+//             res.status(403).send({ message: "Order has been cancelled" });
+//         }
+
+//         await OrderModel.update({ status }, { where: { id: orderId } });
+
+//         await HistoryModel.create({
+//             order_id: orderId,
+//             user_id: currentUser,
+//             status,
+//             note: `Orderan dalam keadaan ${status}`,
+//         });
+
+
+//         return res.send({ message: "Order status updated successfully" });
+//     } catch (error) {
+//         next(error);
+//     }
+// };
+
 /**
  * @param {import("express").Request} req
  * @param {import("express").Response} res
@@ -519,28 +569,62 @@ const updateStatus = async(req, res, next) => {
     const { status } = req.body;
     const currentUser = req.user.id;
 
+    // Mulai transaksi database
+    const transaction = await sequelize.transaction();
+
     try {
-        const order = await OrderModel.findByPk(orderId);
+        // 1. Cari order berdasarkan orderId
+        const order = await OrderModel.findByPk(orderId, { transaction });
 
         if (!order) {
+            await transaction.rollback();
             return res.status(404).send({ message: "Order not found" });
         }
 
+        // 2. Cek jika order sudah dibatalkan
         if (order.status == "cancelled") {
-            res.status(403).send({ message: "Order has been cancelled" });
+            await transaction.rollback();
+            return res.status(403).send({ message: "Order has been cancelled" });
         }
 
-        await OrderModel.update({ status }, { where: { id: orderId } });
+        // 3. Update status order
+        await OrderModel.update({ status }, { where: { id: orderId }, transaction });
 
+        // 4. Simpan history perubahan status
         await HistoryModel.create({
             order_id: orderId,
             user_id: currentUser,
             status,
             note: `Orderan dalam keadaan ${status}`,
-        });
+        }, { transaction });
+
+        // 5. Jika status adalah "delivered", simpan rating untuk setiap produk
+        if (status === "completed") {
+            // Ambil semua product_id dari tabel order_items
+            const orderItems = await OrderItemModel.findAll({
+                where: { order_id: orderId },
+                transaction,
+            });
+
+            // Simpan rating untuk setiap product_id ke tabel product_ratings
+            const ratingsData = orderItems.map((item) => ({
+                order_id: orderId,
+                user_id: currentUser,
+                product_id: item.product_id,
+                rating: null, // Nilai default (opsional)
+                comment: null, // Komentar default (opsional)
+                rating_time: new Date(),
+            }));
+            await ReviewModel.bulkCreate(ratingsData, { transaction });
+        }
+
+        // Commit transaksi jika semua berhasil
+        await transaction.commit();
 
         return res.send({ message: "Order status updated successfully" });
     } catch (error) {
+        // Rollback transaksi jika ada error
+        await transaction.rollback();
         next(error);
     }
 };

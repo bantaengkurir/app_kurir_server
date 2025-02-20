@@ -785,6 +785,7 @@ const cartRouter = require('./routes/cart.router');
 const chatRouter = require('./routes/chat.router');
 const paymentRouter = require('./routes/payment.router');
 const order_historieRouter = require('./routes/order_historie.router');
+const ratingRouter = require('./routes/rating.router');
 
 // Middleware
 app.use(cookieParser());
@@ -812,6 +813,7 @@ app.use('/api/carts', cartRouter);
 app.use('/api/chats', chatRouter);
 app.use('/api/payments', paymentRouter);
 app.use('/api/order_histories', order_historieRouter);
+app.use('/api/ratings', ratingRouter);
 
 app.use(bodyParser.json());
 

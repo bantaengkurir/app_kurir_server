@@ -13,9 +13,9 @@ const geolib = require('geolib');
 const index = async(req, res, next) => {
     try {
         const order_histories = await OrderHistoryModel.findAll({
-            // where: {
-            //     user_id: req.user.id,
-            // },
+            where: {
+                user_id: req.user.id,
+            },
             include: [{
                     model: OrderModel,
                     as: "order",

@@ -28,6 +28,14 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: "order_id",
                 as: "shipping_cost"
             })
+            order.hasMany(models.review, {
+                foreignKey: "order_id",
+                as: "review_rat"
+            })
+            order.hasMany(models.courier_rating, {
+                foreignKey: "order_id",
+                as: "courier_rat"
+            })
             order.belongsTo(models.user, {
                 foreignKey: "user_id",
                 as: "user"
