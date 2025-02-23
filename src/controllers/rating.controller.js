@@ -155,6 +155,93 @@ const createRatCourier = async(req, res, _next) => {
     }
 };
 
+const updateRatProduct = async(req, res, _next) => {
+    try {
+        const currentUser = req.user.id;
+        const { order_id, product_id, rating, comment } = req.body;
 
 
-module.exports = { indexProduct, indexCourier, createRatProduct, createRatCourier };
+        // Memastikan produk milik seller yang sedang login
+        const productRating = await ReviewModel.findOne({
+            where: {
+                order_id,
+                product_id,
+                user_id: currentUser
+            },
+        });
+
+        if (!productRating) {
+            return res.status(404).send({ message: "Produk tidak ditemukan atau Anda tidak memiliki izin untuk memperbaruinya" });
+        }
+
+        // Memvalidasi inputan dari user
+        if (!rating || !comment) {
+            return res.status(400).send({ message: "Tidak ada data yang diperbarui" });
+        }
+
+        // Update produk
+        const updatedRatProduct = await productRating.update({
+            order_id,
+            product_id,
+            rating,
+            comment
+        });
+
+        return res.send({
+            message: "Product updated successfully",
+            data: updatedRatProduct,
+        });
+    } catch (error) {
+
+        console.error("Error:", error.message); // Hanya untuk debugging
+        return res.status(500).json({ message: "Internal server error" });
+
+    }
+};
+
+const updateRatCourier = async(req, res, _next) => {
+    try {
+        const currentUser = req.user.id;
+        const { order_id, courier_id, rating, review } = req.body;
+
+
+        // Memastikan produk milik seller yang sedang login
+        const courierRating = await CourierRatingModel.findOne({
+            where: {
+                order_id,
+                courier_id,
+                user_id: currentUser
+            },
+        });
+
+        if (!courierRating) {
+            return res.status(404).send({ message: "Produk tidak ditemukan atau Anda tidak memiliki izin untuk memperbaruinya" });
+        }
+
+        // Memvalidasi inputan dari user
+        if (!rating || !review) {
+            return res.status(400).send({ message: "Tidak ada data yang diperbarui" });
+        }
+
+        // Update produk
+        const updatedRatCourier = await courierRating.update({
+            order_id,
+            courier_id,
+            rating,
+            review
+        });
+
+        return res.send({
+            message: "Courier updated successfully",
+            data: updatedRatCourier,
+        });
+    } catch (error) {
+
+        console.error("Error:", error.message); // Hanya untuk debugging
+        return res.status(500).json({ message: "Internal server error" });
+
+    }
+};
+
+
+module.exports = { indexProduct, indexCourier, createRatProduct, createRatCourier, updateRatProduct, updateRatCourier };

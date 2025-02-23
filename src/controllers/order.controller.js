@@ -418,6 +418,8 @@ const getOrderById = async(req, res, next) => {
             total: parseFloat(order.total_price),
             quantity: totalQuantity,
             status: order.status,
+            order_code: order.order_code,
+            order_date: order.order_date,
             payment_status: order.payment_status,
             payment_method: order.payment_method,
             address: order.shipping_cost ? order.shipping_cost.address : null,
