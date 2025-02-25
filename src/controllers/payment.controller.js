@@ -232,7 +232,7 @@ const createPayment = async(req, res) => {
                         // Kurangi stok dan tambahkan jumlah sold
                         await ProductModel.update({
                             stock: product.stock - item.quantity,
-                            sold: product.sold + item.quantity,
+                            total_sold: product.total_sold + item.quantity,
                         }, {
                             where: { id: product.id },
                         });

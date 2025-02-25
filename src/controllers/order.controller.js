@@ -125,6 +125,117 @@ const index = async(req, res, next) => {
     }
 };
 
+const indexCourier = async(req, res, next) => {
+    try {
+        const orders = await OrderModel.findAll({
+            include: [{
+                    model: UserModel,
+                    as: "couriers",
+                    where: { id: req.user.id }, // Filter berdasarkan ID user yang login sebagai courier
+                    required: true, // Hanya tampilkan order yang memiliki relasi dengan courier
+                    attributes: ["id", "name", "email", "profile_image", "phone_number", "latitude", "longitude"],
+                    include: [{
+                        model: CourierModel,
+                        as: "courier"
+                    }]
+                },
+                {
+                    model: UserModel,
+                    as: "user",
+                },
+                {
+                    model: ShippingModel,
+                    as: "shipping_cost",
+                },
+                {
+                    model: PaymentModel,
+                    as: "payment",
+                },
+                {
+                    model: OrderItemModel,
+                    as: "orderitem",
+                    include: [{
+                        model: ProductModel,
+                        as: "product",
+                        include: [{
+                            model: UserModel,
+                            as: "seller"
+                        }]
+                    }],
+                },
+            ],
+        });
+
+        const formattedOrders = orders.map((order) => {
+            const totalQuantity = order.orderitem.reduce((acc, item) => acc + item.quantity, 0);
+
+            return {
+                order_id: order.id,
+                user_id: order.user_id,
+                total: parseFloat(order.total_price),
+                quantity: totalQuantity,
+                order_code: order.order_code,
+                order_date: order.order_date,
+                status: order.status,
+                payment_method: order.payment_method,
+                payment_status: order.payment_status,
+                address: order.shipping_cost.address,
+                latitude: order.shipping_cost.latitude,
+                longitude: order.shipping_cost.longitude,
+                distance: order.shipping_cost.distance,
+                created_at: order.created_at,
+                user: {
+                    id: order.user.id,
+                    name: order.user.name,
+                    email: order.user.email,
+                    profile_image: order.user.profile_image,
+                    phone_number: order.user.phone_number,
+                    address: order.user.address,
+                    latitude: order.user.latitude,
+                    longitude: order.user.longitude,
+                    gender: order.user.gender,
+                    date_of_birth: order.user.date_of_birth,
+
+                },
+                courier: {
+                    id: order.couriers.id,
+                    name: order.couriers.name,
+                    img_url: order.couriers.img_url,
+                    phone_number: order.couriers.phone_number,
+                    profile_image: order.couriers.profile_image,
+                    vehicle_type: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_type : null : null,
+                    vehicle_plate: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_plate : null : null,
+                },
+                items: order.orderitem.map((item) => ({
+                    product_id: item.product.id,
+                    name: item.product.name,
+                    description: item.product.description,
+                    image_url: item.product.image_url,
+                    rating: item.product.rating,
+                    category: item.product.category,
+                    price: parseFloat(item.product.price),
+                    quantity: item.quantity,
+                    seller_name: item.product.seller ? item.product.seller.name : null, // Perbaikan di sini
+                    seller_phone_number: item.product.seller ? item.product.seller.phone_number : null, // Perbaikan di sini
+                    seller_address: item.product.seller ? item.product.seller.address : null,
+                    seller_latitude: item.product.seller ? item.product.seller.latitude : null,
+                    seller_longitude: item.product.seller ? item.product.seller.longitude : null,
+                    seller_profile_image: item.product.seller ? item.product.seller.profile_image : null,
+                })),
+                shipping_cost: order.shipping_cost,
+            };
+        });
+
+        return res.send({
+            message: "Success",
+            data: formattedOrders,
+        });
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({ message: "Internal Server Error" });
+    }
+};
+
 
 /**
  * @param {import("express").Request} req
@@ -397,6 +508,10 @@ const getOrderById = async(req, res, next) => {
                     include: [{
                         model: ProductModel,
                         as: "product",
+                        include: [{
+                            model: UserModel,
+                            as: "seller"
+                        }]
                     }, ],
                 },
             ],
@@ -460,6 +575,13 @@ const getOrderById = async(req, res, next) => {
                     price: parseFloat(item.product.price),
                     stock: item.product.stock,
                     quantity: item.quantity,
+                    seller_name: item.product.seller.name,
+                    seller_profile_image: item.product.seller.profile_image,
+                    seller_phone_number: item.product.seller.phone_number,
+                    seller_email: item.product.seller.email,
+                    seller_address: item.product.seller.address,
+                    seller_latitude: item.product.seller.latitude,
+                    seller_longitude: item.product.seller.longitude,
                 })),
             shipping_cost: order.shipping_cost,
         };
@@ -669,4 +791,4 @@ const updateCourierLocation = async(req, res, next) => {
 };
 
 
-module.exports = { index, create, getOrderById, cancelOrder, updateStatus, updateCourierLocation };
+module.exports = { index, indexCourier, create, getOrderById, cancelOrder, updateStatus, updateCourierLocation };
