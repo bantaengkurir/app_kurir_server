@@ -690,7 +690,7 @@ const cancelOrder = async(req, res, next) => {
  */
 const updateStatus = async(req, res, next) => {
     const { orderId } = req.params;
-    const { status } = req.body;
+    const { status, note, availability } = req.body;
     const currentUser = req.user.id;
 
     // Mulai transaksi database
@@ -719,8 +719,10 @@ const updateStatus = async(req, res, next) => {
             order_id: orderId,
             user_id: currentUser,
             status,
-            note: `Orderan dalam keadaan ${status}`,
+            note: note || `Orderan dalam keadaan ${status}`,
         }, { transaction });
+
+        await CourierModel.update({ availability }, { where: { id: currentUser }, transaction });
 
         // 5. Jika status adalah "delivered", simpan rating untuk setiap produk
         if (status === "completed") {

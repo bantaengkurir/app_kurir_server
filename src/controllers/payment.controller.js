@@ -8,6 +8,17 @@ const {
 } = require("../models");
 const { saveOrderHistory } = require("../middlewares/order_history.helper");
 
+const Pusher = require('pusher');
+
+// Konfigurasi Pusher
+const pusher = new Pusher({
+    appId: "1948721",
+    key: "27dd26c02b96af0f4e50",
+    secret: "231f888aa4f383cb2b18",
+    cluster: "ap1",
+    useTLS: true
+});
+
 /**
  * @param {import("express").Request} req
  * @param {import("express").Response} res
@@ -43,9 +54,91 @@ const index = async(req, res, _next) => {
 
 };
 
+// // const createPayment = async(req, res) => {
+// //     try {
+// //         const { order_id } = req.params; // Ambil order_id dari params
+// //         const { payment_method } = req.body; // Ambil payment_method dari body
+
+// //         // Validasi input
+// //         if (!order_id) {
+// //             return res.status(400).send({ message: "order_id wajib diisi di URL params" });
+// //         }
+
+// //         if (!payment_method) {
+// //             return res.status(400).send({ message: "payment_method wajib diisi di body" });
+// //         }
+
+// //         // Validasi metode pembayaran
+// //         const validPaymentMethods = ["COD", "transfer"];
+// //         if (!validPaymentMethods.includes(payment_method)) {
+// //             return res.status(400).send({ message: "Metode pembayaran tidak valid" });
+// //         }
+
+// //         // Cari order berdasarkan order_id
+// //         const order = await OrderModel.findOne({
+// //             where: { id: order_id },
+// //             include: [{ model: ShippingModel, as: "shipping_cost" }],
+// //         });
+
+// //         if (!order) {
+// //             return res.status(404).send({ message: "Order tidak ditemukan" });
+// //         }
+
+// //         // Hitung total amount
+// //         const cost = order.shipping_cost ? order.shipping_cost[0].shipping_cost || 0 : 0;
+// //         const amount = parseFloat(order.total_price) + parseFloat(cost);
+
+// //         console.log("cost", cost);
+
+// //         // let payment_status = "pending"; // Nilai default
+// //         if (payment_method == "COD") {
+// //             payment_status = "completed";
+// //         } else if (payment_method == "transfer") {
+// //             payment_status = "process";
+// //         }
+
+
+// //         if (order_id == order.order_id || order.status == 'process' || order.status == 'completed') {
+// //             return res.status(403).send({ message: `pembayaran dalam keadaan ${order.status}` });
+// //         } else if (order.status == 'cancelled' || order.status == 'failed') {
+// //             return res.status(403).send({ message: `pembayaran dalam keadaan ${order.status}` });
+// //         }
+
+
+// //         // Buat data pembayaran
+// //         const payment = await PaymentModel.create({
+// //             order_id,
+// //             user_id: order.user_id,
+// //             courier_id: order.courier_id,
+// //             payment_method,
+// //             amount,
+// //             payment_status: payment_status,
+// //             payment_date: new Date(),
+// //         });
+
+// //         await OrderModel.update({
+// //             status: "process",
+// //             payment_status: payment_status,
+// //         }, {
+// //             where: {
+// //                 id: order_id,
+// //             },
+// //         });
+
+// //         return res.status(201).send({
+// //             message: "Pembayaran berhasil dibuat",
+// //             data: payment,
+// //         });
+// //     } catch (error) {
+// //         console.error("Error:", error.message);
+// //         return res.status(500).send({ message: "Internal Server Error" });
+// //     }
+// // };
+
 // const createPayment = async(req, res) => {
 //     try {
 //         const { order_id } = req.params; // Ambil order_id dari params
+//         const currentUser = req.user.id;
 //         const { payment_method } = req.body; // Ambil payment_method dari body
 
 //         // Validasi input
@@ -79,20 +172,36 @@ const index = async(req, res, _next) => {
 
 //         console.log("cost", cost);
 
-//         // let payment_status = "pending"; // Nilai default
+//         let payment_status = "pending"; // Nilai default
 //         if (payment_method == "COD") {
-//             payment_status = "completed";
+//             payment_status = "process";
 //         } else if (payment_method == "transfer") {
 //             payment_status = "process";
 //         }
 
+//         // if (order_id) {
+//         //     return res.status(403).send({ message: `pembayaran dalam keadaan ${payment_status}` });
+//         // } else if (order.status == 'cancelled' || order.status == 'failed') {
+//         //     return res.status(403).send({ message: `pembayaran dalam keadaan ${payment_status}` });
+//         // }
 
-//         if (order_id == order.order_id || order.status == 'process' || order.status == 'completed') {
-//             return res.status(403).send({ message: `pembayaran dalam keadaan ${order.status}` });
-//         } else if (order.status == 'cancelled' || order.status == 'failed') {
-//             return res.status(403).send({ message: `pembayaran dalam keadaan ${order.status}` });
+//         if (payment_method == 'COD') {
+
+
+//             await OrderHistoryModel.create({
+//                 order_id,
+//                 user_id: currentUser,
+//                 status: payment_status,
+//                 note: `Lakukan pembayaran setelah barang diterima`,
+//             });
+//         } else {
+//             await OrderHistoryModel.create({
+//                 order_id,
+//                 user_id: currentUser,
+//                 status: payment_status,
+//                 note: `Pembayaran dalam keadaan ${payment_status}`,
+//             });
 //         }
-
 
 //         // Buat data pembayaran
 //         const payment = await PaymentModel.create({
@@ -105,6 +214,7 @@ const index = async(req, res, _next) => {
 //             payment_date: new Date(),
 //         });
 
+//         // Update status order
 //         await OrderModel.update({
 //             status: "process",
 //             payment_status: payment_status,
@@ -113,6 +223,61 @@ const index = async(req, res, _next) => {
 //                 id: order_id,
 //             },
 //         });
+
+//         // Proses update produk jika pembayaran berhasil
+//         if (payment_status === "process" || payment_status === "completed") {
+//             // Ambil semua item dari order
+//             const orderItems = await OrderItemModel.findAll({
+//                 where: { order_id: order.id },
+//             });
+
+//             // Update stok dan sold untuk setiap produk
+//             for (let item of orderItems) {
+//                 const product = await ProductModel.findOne({
+//                     where: { id: item.product_id },
+//                 });
+
+//                 if (product) {
+//                     // Pastikan ada cukup stok untuk mengurangi
+//                     if (product.stock >= item.quantity) {
+//                         // Kurangi stok dan tambahkan jumlah sold
+//                         await ProductModel.update({
+//                             stock: product.stock - item.quantity,
+//                             total_sold: product.total_sold + item.quantity,
+//                         }, {
+//                             where: { id: product.id },
+//                         });
+//                     } else {
+//                         return res.status(400).send({ message: `Stok produk ${product.name} tidak cukup` });
+//                     }
+//                 }
+//             }
+//         }
+
+//         // Catat riwayat pembayaran
+//         // await saveOrderHistory(order_id, req.user.id, payment_status, `Pembayaran dalam keadaan ${payment_status}`);
+//         // Kirim notifikasi ke courier melalui Pusher
+//         pusher.trigger('orders', 'new-order', {
+//             order_id: order.id,
+//             user_id: order.user_id,
+//             courier_id: order.courier_id,
+//             total: amount,
+//             items: orderItems.map((item) => ({
+//                 product_id: item.product_id,
+//                 name: item.name,
+//                 quantity: item.quantity,
+//                 price: item.price,
+//             })),
+//         });
+
+//         console.log("Data yang dikirim ke Pusher:", {
+//             order_id: order.id,
+//             user_id: order.user_id,
+//             courier_id: order.courier_id,
+//             total: amount,
+//             items: orderItems,
+//         });
+
 
 //         return res.status(201).send({
 //             message: "Pembayaran berhasil dibuat",
@@ -124,10 +289,11 @@ const index = async(req, res, _next) => {
 //     }
 // };
 
+
 const createPayment = async(req, res) => {
     try {
         const { order_id } = req.params; // Ambil order_id dari params
-        const currentUser = req.user.id;
+        const currentUser = req.user.id; // Ambil user ID dari token/auth
         const { payment_method } = req.body; // Ambil payment_method dari body
 
         // Validasi input
@@ -159,24 +325,17 @@ const createPayment = async(req, res) => {
         const cost = order.shipping_cost ? order.shipping_cost[0].shipping_cost || 0 : 0;
         const amount = parseFloat(order.total_price) + parseFloat(cost);
 
-        console.log("cost", cost);
+        console.log("Shipping Cost:", cost);
+        console.log("Total Amount:", amount);
 
+        // Tentukan status pembayaran
         let payment_status = "pending"; // Nilai default
-        if (payment_method == "COD") {
-            payment_status = "process";
-        } else if (payment_method == "transfer") {
+        if (payment_method === "COD" || payment_method === "transfer") {
             payment_status = "process";
         }
 
-        // if (order_id) {
-        //     return res.status(403).send({ message: `pembayaran dalam keadaan ${payment_status}` });
-        // } else if (order.status == 'cancelled' || order.status == 'failed') {
-        //     return res.status(403).send({ message: `pembayaran dalam keadaan ${payment_status}` });
-        // }
-
-        if (payment_method == 'COD') {
-
-
+        // Buat riwayat pembayaran
+        if (payment_method === 'COD') {
             await OrderHistoryModel.create({
                 order_id,
                 user_id: currentUser,
@@ -241,13 +400,35 @@ const createPayment = async(req, res) => {
                     }
                 }
             }
+
+            // Kirim data order ke Pusher
+            try {
+                pusher.trigger('orders', 'new-order', {
+                    order_id: order.id,
+                    user_id: order.user_id,
+                    courier_id: order.courier_id,
+                    total: amount,
+                    items: orderItems.map((item) => ({
+                        product_id: item.product_id,
+                        name: item.name,
+                        quantity: item.quantity,
+                        price: item.price,
+                    })),
+                });
+
+                console.log("Data yang dikirim ke Pusher:", {
+                    order_id: order.id,
+                    user_id: order.user_id,
+                    courier_id: order.courier_id,
+                    total: amount,
+                    items: orderItems,
+                });
+            } catch (pusherError) {
+                console.error("Gagal mengirim data ke Pusher:", pusherError);
+            }
         }
 
-        // Catat riwayat pembayaran
-        // await saveOrderHistory(order_id, req.user.id, payment_status, `Pembayaran dalam keadaan ${payment_status}`);
-
-
-
+        // Response sukses
         return res.status(201).send({
             message: "Pembayaran berhasil dibuat",
             data: payment,
@@ -257,7 +438,6 @@ const createPayment = async(req, res) => {
         return res.status(500).send({ message: "Internal Server Error" });
     }
 };
-
 
 const updateStatus = async(req, res, _next) => {
     try {
