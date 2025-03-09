@@ -786,6 +786,8 @@ const chatRouter = require('./routes/chat.router');
 const paymentRouter = require('./routes/payment.router');
 const order_historieRouter = require('./routes/order_historie.router');
 const ratingRouter = require('./routes/rating.router');
+const earningRouter = require('./routes/earning.roter');
+const midtransRouter = require('./routes/midtrans.router');
 
 // Middleware
 app.use(cookieParser());
@@ -814,6 +816,8 @@ app.use('/api/chats', chatRouter);
 app.use('/api/payments', paymentRouter);
 app.use('/api/order_histories', order_historieRouter);
 app.use('/api/ratings', ratingRouter);
+app.use('/api/earnings', earningRouter);
+app.use("/api/midtrans", midtransRouter);
 
 app.use(bodyParser.json());
 

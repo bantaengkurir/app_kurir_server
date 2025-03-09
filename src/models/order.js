@@ -54,7 +54,9 @@ module.exports = (sequelize, DataTypes) => {
         payment_method: DataTypes.ENUM('COD', 'transfer'),
         payment_status: DataTypes.ENUM('pending', 'process', 'cancelled', 'completed'),
         order_code: DataTypes.STRING,
-        order_date: DataTypes.DATE
+        order_date: DataTypes.DATE,
+        purchase_receipt_photo: DataTypes.TEXT,
+        delivery_receipt_photo: DataTypes.TEXT
     }, {
         sequelize,
         modelName: 'order',

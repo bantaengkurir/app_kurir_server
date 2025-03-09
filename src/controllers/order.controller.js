@@ -9,6 +9,8 @@ const {
     order_historie: HistoryModel,
     review: ReviewModel,
     courier_rating: CourierRatingModel,
+    seller_earning: Seller_earningModel,
+    courier_earning: Courier_earningModel
 } = require("../models");
 
 const { sequelize } = require('../models');
@@ -491,6 +493,10 @@ const getOrderById = async(req, res, next) => {
                     }]
                 },
                 {
+                    model: UserModel,
+                    as: "user",
+                },
+                {
                     model: ShippingModel,
                     as: "shipping_cost",
                 },
@@ -542,7 +548,7 @@ const getOrderById = async(req, res, next) => {
             longitude: order.shipping_cost ? order.shipping_cost.longitude : null,
             distance: order.shipping_cost ? order.shipping_cost.distance : null,
             created_at: order.created_at,
-            // courier: order.couriers,
+            customer: order.user,
             courier: {
                 id: order.couriers.id,
                 name: order.couriers.name,
@@ -575,6 +581,7 @@ const getOrderById = async(req, res, next) => {
                     price: parseFloat(item.product.price),
                     stock: item.product.stock,
                     quantity: item.quantity,
+                    seller_id: item.product.seller.id,
                     seller_name: item.product.seller.name,
                     seller_profile_image: item.product.seller.profile_image,
                     seller_phone_number: item.product.seller.phone_number,
@@ -688,6 +695,84 @@ const cancelOrder = async(req, res, next) => {
  * @param {import("express").Response} res
  * @param {import("express").NextFunction} next
  */
+// const updateStatus = async(req, res, next) => {
+//     const { orderId } = req.params;
+//     const { status, note, availability } = req.body;
+//     const currentUser = req.user.id;
+
+//     if (!req.file) {
+//         return res.status(400).send({ message: "Gambar tidak ditemukan, pastikan gambar diunggah dengan benar" });
+//     }
+
+//     const image = req.file.path; // Cloudinary URL
+//     console.log("ini image yang diupload", image)
+
+//     // Mulai transaksi database
+//     const transaction = await sequelize.transaction();
+
+//     try {
+//         // 1. Cari order berdasarkan orderId
+//         const order = await OrderModel.findByPk(orderId, { transaction });
+
+//         if (!order) {
+//             await transaction.rollback();
+//             return res.status(404).send({ message: "Order not found" });
+//         }
+
+//         // 2. Cek jika order sudah dibatalkan
+//         if (order.status == "cancelled") {
+//             await transaction.rollback();
+//             return res.status(403).send({ message: "Order has been cancelled" });
+//         }
+
+//         // 3. Update status order
+//         await OrderModel.update({
+//             status,
+//             purchase_receipt_photo: image,
+//             delivery_receipt_photo: image,
+//         }, { where: { id: orderId }, transaction });
+
+//         // 4. Simpan history perubahan status
+//         await HistoryModel.create({
+//             order_id: orderId,
+//             user_id: currentUser,
+//             status,
+//             note: note || `Orderan dalam keadaan ${status}`,
+//         }, { transaction });
+
+//         await CourierModel.update({ availability }, { where: { id: currentUser }, transaction });
+
+//         // 5. Jika status adalah "delivered", simpan rating untuk setiap produk
+//         if (status === "completed") {
+//             // Ambil semua product_id dari tabel order_items
+//             const orderItems = await OrderItemModel.findAll({
+//                 where: { order_id: orderId },
+//                 transaction,
+//             });
+
+//             // Simpan rating untuk setiap product_id ke tabel product_ratings
+//             const ratingsData = orderItems.map((item) => ({
+//                 order_id: orderId,
+//                 user_id: currentUser,
+//                 product_id: item.product_id,
+//                 rating: null, // Nilai default (opsional)
+//                 comment: null, // Komentar default (opsional)
+//                 rating_time: new Date(),
+//             }));
+//             await ReviewModel.bulkCreate(ratingsData, { transaction });
+//         }
+
+//         // Commit transaksi jika semua berhasil
+//         await transaction.commit();
+
+//         return res.send({ message: "Order status updated successfully" });
+//     } catch (error) {
+//         // Rollback transaksi jika ada error
+//         await transaction.rollback();
+//         next(error);
+//     }
+// };
+
 const updateStatus = async(req, res, next) => {
     const { orderId } = req.params;
     const { status, note, availability } = req.body;
@@ -698,12 +783,50 @@ const updateStatus = async(req, res, next) => {
 
     try {
         // 1. Cari order berdasarkan orderId
-        const order = await OrderModel.findByPk(orderId, { transaction });
+        const order = await OrderModel.findByPk(orderId, {
+            include: [{
+                    model: UserModel,
+                    as: "couriers",
+                    attributes: ["id", "name", "email", "phone_number", "latitude", "longitude"],
+                    include: [{
+                        model: CourierModel,
+                        as: "courier"
+                    }]
+                },
+                {
+                    model: ShippingModel,
+                    as: "shipping_cost",
+                },
+                {
+                    model: PaymentModel,
+                    as: "payment",
+                },
+                {
+                    model: HistoryModel,
+                    as: "order_historie",
+                },
+                {
+                    model: OrderItemModel,
+                    as: "orderitem",
+                    include: [{
+                        model: ProductModel,
+                        as: "product",
+                        include: [{
+                            model: UserModel,
+                            as: "seller"
+                        }]
+                    }, ],
+                },
+            ],
+            transaction
+        });
 
         if (!order) {
             await transaction.rollback();
             return res.status(404).send({ message: "Order not found" });
         }
+
+        console.log("ini order", order)
 
         // 2. Cek jika order sudah dibatalkan
         if (order.status == "cancelled") {
@@ -711,10 +834,23 @@ const updateStatus = async(req, res, next) => {
             return res.status(403).send({ message: "Order has been cancelled" });
         }
 
-        // 3. Update status order
-        await OrderModel.update({ status }, { where: { id: orderId }, transaction });
+        // 3. Siapkan data untuk diupdate
+        const updateData = { status };
 
-        // 4. Simpan history perubahan status
+        // Jika purchase_receipt_photo diupload, tambahkan ke updateData
+        if (req.files && req.files.purchase_receipt_photo) {
+            updateData.purchase_receipt_photo = req.files.purchase_receipt_photo[0].path;
+        }
+
+        // Jika delivery_receipt_photo diupload, tambahkan ke updateData
+        if (req.files && req.files.delivery_receipt_photo) {
+            updateData.delivery_receipt_photo = req.files.delivery_receipt_photo[0].path;
+        }
+
+        // 4. Update status order dan path foto (jika ada)
+        await OrderModel.update(updateData, { where: { id: orderId }, transaction });
+
+        // 5. Simpan history perubahan status
         await HistoryModel.create({
             order_id: orderId,
             user_id: currentUser,
@@ -722,9 +858,10 @@ const updateStatus = async(req, res, next) => {
             note: note || `Orderan dalam keadaan ${status}`,
         }, { transaction });
 
+        // 6. Update availability kurir
         await CourierModel.update({ availability }, { where: { id: currentUser }, transaction });
 
-        // 5. Jika status adalah "delivered", simpan rating untuk setiap produk
+        // 7. Jika status adalah "completed", simpan rating untuk setiap produk
         if (status === "completed") {
             // Ambil semua product_id dari tabel order_items
             const orderItems = await OrderItemModel.findAll({
@@ -742,7 +879,52 @@ const updateStatus = async(req, res, next) => {
                 rating_time: new Date(),
             }));
             await ReviewModel.bulkCreate(ratingsData, { transaction });
+
+
         }
+        // Ambil semua item dari order
+        const orderItems = order.orderitem; // Mengambil items dari order yang sudah di-include
+
+        // Kelompokkan items berdasarkan seller_id dan hitung total amount per seller
+        const sellerEarnings = {};
+
+        orderItems.forEach((item) => {
+            const sellerId = item.product.seller.id; // Ambil seller_id dari product
+            const itemTotal = item.quantity * item.product.price; // Hitung total harga per item
+
+            if (!sellerEarnings[sellerId]) {
+                sellerEarnings[sellerId] = 0; // Inisialisasi jika seller belum ada di objek
+            }
+
+            sellerEarnings[sellerId] += itemTotal; // Tambahkan ke total pendapatan seller
+        });
+
+        // Simpan pendapatan untuk setiap seller
+        for (const sellerId in sellerEarnings) {
+            const totalAmount = sellerEarnings[sellerId]; // Total amount untuk seller
+            const sellerEarning = totalAmount * 0.8; // 80% dari total amount
+
+            await Seller_earningModel.create({
+                order_id: orderId,
+                seller_id: sellerId,
+                amount: totalAmount, // Total harga produk berdasarkan seller
+                seller_earning: sellerEarning, // 80% dari total amount
+                earning_date: new Date(),
+            }, { transaction });
+        }
+
+        // Hitung pendapatan kurir (20% dari shipping_cost)
+        const courierEarning = order.shipping_cost[0].shipping_cost * 0.2;
+
+        // Buat data pendapatan kurir
+        await Courier_earningModel.create({
+            order_id: orderId,
+            courier_id: order.couriers.id,
+            amount: order.shipping_cost[0].shipping_cost,
+            courier_earning: courierEarning,
+            earning_date: new Date(),
+        }, { transaction });
+
 
         // Commit transaksi jika semua berhasil
         await transaction.commit();
@@ -754,6 +936,7 @@ const updateStatus = async(req, res, next) => {
         next(error);
     }
 };
+
 
 /**
  * @param {import("express").Request} req

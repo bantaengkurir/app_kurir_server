@@ -79,6 +79,14 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: "user_id",
                 as: "payment"
             })
+            user.hasMany(models.courier_earning, {
+                foreignKey: "courier_id",
+                as: "courier_earning"
+            })
+            user.hasMany(models.seller_earning, {
+                foreignKey: "seller_id",
+                as: "seller_earning"
+            })
         }
     }
     user.init({
