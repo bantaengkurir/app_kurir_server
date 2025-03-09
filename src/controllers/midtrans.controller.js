@@ -103,7 +103,12 @@ const createTransaction = async(req, res) => {
                 first_name: currentUser.username,
                 email: currentUser.email,
                 phone: currentUser.phone_number
-            }
+            },
+            callbacks: {
+                finish: "http://localhost:5173/courier&sallery", // URL setelah pembayaran berhasil
+                error: "https://example.com/error", // URL jika pembayaran gagal
+                pending: "https://example.com/pending", // URL jika pembayaran pending
+            },
         };
 
         console.log("parameter", parameter)
@@ -115,6 +120,12 @@ const createTransaction = async(req, res) => {
         });
     } catch (error) {
         console.error("Error creating transaction:", error);
+        if (error.message.includes("transaction_details.order_id has already been taken")) {
+            return res.status(400).send({
+                message: "Bad Request",
+                error: "Order ID sudah digunakan. Silakan gunakan Order ID yang berbeda atau pembayaran telah dilakukan.",
+            });
+        }
         res.status(500).send({
             message: "Internal Server Error",
             error: error.message,
