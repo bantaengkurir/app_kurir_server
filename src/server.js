@@ -788,13 +788,15 @@ const order_historieRouter = require('./routes/order_historie.router');
 const ratingRouter = require('./routes/rating.router');
 const earningRouter = require('./routes/earning.roter');
 const midtransRouter = require('./routes/midtrans.router');
+const callRouter = require('./routes/call.router');
 
 // Middleware
 app.use(cookieParser());
 app.use(
     cors({
-        origin: "http://localhost:5173", // URL frontend Anda
+        origin: ["*", "http://localhost:5173", "http://localhost:5174"], // URL frontend Anda
         credentials: true, // Mengizinkan pengiriman cookie bersama permintaan
+        exposedHeaders: ['set-cookie', 'authorization']
     })
 );
 app.use(express.urlencoded({ extended: true }));
@@ -818,6 +820,7 @@ app.use('/api/order_histories', order_historieRouter);
 app.use('/api/ratings', ratingRouter);
 app.use('/api/earnings', earningRouter);
 app.use("/api/midtrans", midtransRouter);
+app.use('/api/calls', callRouter);
 
 app.use(bodyParser.json());
 

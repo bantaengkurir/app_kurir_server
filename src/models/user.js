@@ -104,7 +104,8 @@ module.exports = (sequelize, DataTypes) => {
         verification_code: DataTypes.STRING,
         is_verified: DataTypes.BOOLEAN,
         last_login_device: DataTypes.STRING,
-        status: DataTypes.STRING
+        status: DataTypes.STRING,
+        refresh_token: DataTypes.STRING,
     }, {
         sequelize,
         modelName: 'user',

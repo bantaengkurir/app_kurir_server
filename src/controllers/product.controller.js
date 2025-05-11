@@ -113,9 +113,14 @@ const showDesc = async(req, res, _next) => {
             ], // Urutkan berdasarkan total_sold secara menurun
             limit: limit, // Batasi hasil hanya 10 produk
             include: [{
-                model: ReviewModel,
-                as: "review", // Pastikan nama alias sesuai dengan yang didefinisikan di model
-            }],
+                    model: UserModel,
+                    as: "seller",
+                },
+                {
+                    model: ReviewModel,
+                    as: "review", // Pastikan nama alias sesuai dengan yang didefinisikan di model
+                }
+            ],
         });
         // } else if (currentUser.role == 'seller') {
         //     // Jika user adalah seller, tampilkan 10 produk teratas berdasarkan sold untuk seller tersebut

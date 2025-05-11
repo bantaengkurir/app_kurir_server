@@ -10,7 +10,7 @@ const { validateToken } = require("../middlewares/auth")
 const { index, indexSeller, showDesc, show, create, remove, update } = require("../controllers/product.controller")
 
 // /api/babs
-router.get("/", index);
+router.get("/", validateToken, index);
 router.get("/seller", validateToken, indexSeller);
 router.get("/desc", showDesc);
 router.get("/:id", validateToken, show);

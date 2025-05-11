@@ -18,6 +18,9 @@ module.exports = {
             courier_id: {
                 type: Sequelize.INTEGER
             },
+            midtrans_order_id: {
+                type: Sequelize.STRING
+            },
             payment_method: {
                 type: Sequelize.ENUM('COD', 'transfer'),
                 defaultValue: 'COD'

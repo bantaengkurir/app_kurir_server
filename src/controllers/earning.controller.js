@@ -1,19 +1,125 @@
 const { Op, Sequelize } = require("sequelize");
 const { courier_earning: Courier_earningModel, seller_earning: Seller_earningModel, order: OrderModel } = require("../models")
 
-const index = async(req, res, next) => {
+// const indexCourier = async(req, res, next) => {
+//     const { date } = req.query; // Ambil parameter tanggal dari query
+
+//     console.log("Received date parameter:", date); // Debugging
+
+//     try {
+
+//         let whereCondition = {};
+
+//         // Jika user bukan admin, filter berdasarkan user_id
+//         if (req.user.role !== "admin") {
+//             whereCondition.user_id = req.user.id;
+//         }
+
+
+//         const earnings = await Courier_earningModel.findAll({
+//             where: whereCondition, // Gunakan kondisi where yang sudah ditentukan
+
+//             where: {
+//                 courier_id: req.user.id,
+//                 earning_date: Sequelize.where(
+//                     Sequelize.fn('DATE', Sequelize.col('earning_date')), // Ambil hanya bagian tanggal
+//                     date // Bandingkan dengan tanggal yang dikirim dari frontend
+//                 ),
+//             },
+//         });
+
+//         // console.log("Filtered earnings:", earnings); // Debugging
+
+//         res.send({
+//             message: "Success",
+//             data: earnings,
+//         });
+//     } catch (error) {
+//         console.error("Error fetching earnings:", error);
+//         res.status(500).send({
+//             message: "Internal Server Error",
+//         });
+//     }
+// };
+
+
+const indexCourier = async(req, res, next) => {
     const { date } = req.query; // Ambil parameter tanggal dari query
 
     console.log("Received date parameter:", date); // Debugging
 
     try {
-        const earnings = await Courier_earningModel.findAll({
-            where: {
+        let whereCondition = {};
+
+        // Jika user bukan admin, filter berdasarkan courier_id dan tanggal
+        if (req.user.role !== "admin") {
+            whereCondition = {
+                courier_id: req.user.id, // Filter berdasarkan courier_id user yang login
                 earning_date: Sequelize.where(
                     Sequelize.fn('DATE', Sequelize.col('earning_date')), // Ambil hanya bagian tanggal
                     date // Bandingkan dengan tanggal yang dikirim dari frontend
                 ),
-            },
+            };
+        } else {
+            // Jika admin, filter hanya berdasarkan tanggal (tanpa courier_id)
+            whereCondition = {
+                earning_date: Sequelize.where(
+                    Sequelize.fn('DATE', Sequelize.col('earning_date')), // Ambil hanya bagian tanggal
+                    date // Bandingkan dengan tanggal yang dikirim dari frontend
+                ),
+            };
+        }
+
+        // Ambil data earnings berdasarkan kondisi where
+        const earnings = await Courier_earningModel.findAll({
+            where: whereCondition,
+        });
+
+        // console.log("Filtered earnings:", earnings); // Debugging
+
+        res.send({
+            message: "Success",
+            data: earnings,
+        });
+    } catch (error) {
+        console.error("Error fetching earnings:", error);
+        res.status(500).send({
+            message: "Internal Server Error",
+        });
+    }
+};
+
+
+const indexSeller = async(req, res, next) => {
+    const { date } = req.query; // Ambil parameter tanggal dari query
+
+    console.log("Received date parameter:", date); // Debugging
+
+    try {
+        let whereCondition = {};
+
+        // Jika user bukan admin, filter berdasarkan courier_id dan tanggal
+        if (req.user.role !== "admin") {
+            whereCondition = {
+                seller_id: req.user.id, // Filter berdasarkan courier_id user yang login
+                earning_date: Sequelize.where(
+                    Sequelize.fn('DATE', Sequelize.col('earning_date')), // Ambil hanya bagian tanggal
+                    date // Bandingkan dengan tanggal yang dikirim dari frontend
+                ),
+            };
+        } else {
+            // Jika admin, filter hanya berdasarkan tanggal (tanpa courier_id)
+            whereCondition = {
+                earning_date: Sequelize.where(
+                    Sequelize.fn('DATE', Sequelize.col('earning_date')), // Ambil hanya bagian tanggal
+                    date // Bandingkan dengan tanggal yang dikirim dari frontend
+                ),
+            };
+        }
+
+        // Ambil data earnings berdasarkan kondisi where
+        const earnings = await Seller_earningModel.findAll({
+            where: whereCondition,
         });
 
         // console.log("Filtered earnings:", earnings); // Debugging
@@ -33,7 +139,7 @@ const index = async(req, res, next) => {
 
 
 
-module.exports = { index };
+module.exports = { indexCourier, indexSeller };
 
 
 // const { Op } = require("sequelize");

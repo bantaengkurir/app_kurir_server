@@ -26,12 +26,120 @@ const { io } = require("../config/socket"); // Import WebSocket server
  * @param {import("express").NextFunction} _next
  */
 
+// const index = async(req, res, next) => {
+//     try {
+//         const orders = await OrderModel.findAll({
+//             where: {
+//                 user_id: req.user.id,
+//             },
+//             include: [{
+//                     model: UserModel,
+//                     as: "couriers",
+//                     attributes: ["id", "name", "email", "profile_image", "phone_number", "latitude", "longitude"],
+//                     include: [{
+//                         model: CourierModel,
+//                         as: "courier"
+//                     }]
+//                 },
+//                 {
+//                     model: ShippingModel,
+//                     as: "shipping_cost",
+//                 },
+//                 {
+//                     model: PaymentModel,
+//                     as: "payment",
+//                 },
+//                 {
+//                     model: OrderItemModel,
+//                     as: "orderitem",
+//                     include: [{
+//                         model: ProductModel,
+//                         as: "product",
+//                         include: [{
+//                             model: UserModel,
+//                             as: "seller"
+//                         }]
+//                     }, ],
+//                 },
+//             ],
+//         });
+
+//         const formattedOrders = orders.map((order) => {
+//             // Menghitung total quantity dari orderitem
+//             const totalQuantity = order.orderitem.reduce((acc, item) => acc + item.quantity, 0);
+
+//             return {
+//                 user_id: order.user_id,
+//                 order_id: order.id,
+//                 total: parseFloat(order.total_price),
+//                 quantity: totalQuantity,
+//                 order_code: order.order_code,
+//                 order_date: order.order_date,
+//                 status: order.status,
+//                 payment_method: order.payment_method,
+//                 payment_status: order.payment_status,
+//                 address: order.shipping_cost ? order.shipping_cost.address : null,
+//                 latitude: order.shipping_cost ? order.shipping_cost.latitude : null,
+//                 longitude: order.shipping_cost ? order.shipping_cost.longitude : null,
+//                 distance: order.shipping_cost ? order.shipping_cost.distance : null,
+//                 created_at: order.created_at,
+//                 // courier: order.couriers,
+//                 courier: {
+//                     id: order.couriers.id,
+//                     name: order.couriers.name,
+//                     email: order.couriers.email,
+//                     profile_image: order.couriers.profile_image,
+//                     phone_number: order.couriers.phone_number,
+//                     latitude: order.couriers.latitude,
+//                     longitude: order.couriers.longitude,
+//                     vehicle_type: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_type : null : null,
+//                     vehicle_plate: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_plate : null : null,
+//                 },
+
+//                 items: order.orderitem.map((item) => ({
+//                     product_id: item.product.id,
+//                     seller_id: item.product.seller_id,
+//                     name: item.product.name,
+//                     description: item.product.description,
+//                     image_url: item.product.image_url,
+//                     price: parseFloat(item.product.price),
+//                     stock: item.product.stock,
+//                     quantity: item.quantity,
+//                     seller_name: item.product.seller ? item.product.seller.name : null, // Perbaikan di sini
+//                     seller_phone_number: item.product.seller ? item.product.seller.phone_number : null, // Perbaikan di sini
+//                     seller_address: item.product.seller ? item.product.seller.address : null,
+//                     seller_latitude: item.product.seller ? item.product.seller.latitude : null,
+//                     seller_longitude: item.product.seller ? item.product.seller.longitude : null,
+//                     seller_profile_image: item.product.seller ? item.product.seller.profile_image : null,
+//                 })),
+//                 shipping_cost: order.shipping_cost,
+//                 // payment: order.payment,
+//             };
+//         });
+
+//         return res.send({
+//             message: "Success",
+//             data: formattedOrders,
+//         });
+//     } catch (error) {
+//         console.error("Error:", error);
+//         return res.status(500).send({ message: "Internal Server Error" });
+//     }
+// };
+
 const index = async(req, res, next) => {
     try {
+        let whereCondition = {};
+
+        // Jika user bukan admin, filter berdasarkan user_id
+        if (req.user.role !== "admin") {
+            whereCondition.user_id = req.user.id;
+        }
+
+        // console.log("user", req.user);
+
         const orders = await OrderModel.findAll({
-            where: {
-                user_id: req.user.id,
-            },
+            where: whereCondition, // Gunakan kondisi where yang sudah ditentukan
             include: [{
                     model: UserModel,
                     as: "couriers",
@@ -59,7 +167,7 @@ const index = async(req, res, next) => {
                             model: UserModel,
                             as: "seller"
                         }]
-                    }, ],
+                    }],
                 },
             ],
         });
@@ -78,12 +186,11 @@ const index = async(req, res, next) => {
                 status: order.status,
                 payment_method: order.payment_method,
                 payment_status: order.payment_status,
-                address: order.shipping_cost ? order.shipping_cost.address : null,
-                latitude: order.shipping_cost ? order.shipping_cost.latitude : null,
-                longitude: order.shipping_cost ? order.shipping_cost.longitude : null,
-                distance: order.shipping_cost ? order.shipping_cost.distance : null,
-                created_at: order.created_at,
-                // courier: order.couriers,
+                address: order.shipping_cost ? order.shipping_cost[0].address : null,
+                latitude: order.shipping_cost ? order.shipping_cost[0].latitude : null,
+                longitude: order.shipping_cost ? order.shipping_cost[0].longitude : null,
+                distance: order.shipping_cost ? order.shipping_cost[0].distance : null,
+                created_at: order.createdAt,
                 courier: {
                     id: order.couriers.id,
                     name: order.couriers.name,
@@ -95,7 +202,6 @@ const index = async(req, res, next) => {
                     vehicle_type: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_type : null : null,
                     vehicle_plate: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_plate : null : null,
                 },
-
                 items: order.orderitem.map((item) => ({
                     product_id: item.product.id,
                     seller_id: item.product.seller_id,
@@ -105,15 +211,14 @@ const index = async(req, res, next) => {
                     price: parseFloat(item.product.price),
                     stock: item.product.stock,
                     quantity: item.quantity,
-                    seller_name: item.product.seller ? item.product.seller.name : null, // Perbaikan di sini
-                    seller_phone_number: item.product.seller ? item.product.seller.phone_number : null, // Perbaikan di sini
+                    seller_name: item.product.seller ? item.product.seller.name : null,
+                    seller_phone_number: item.product.seller ? item.product.seller.phone_number : null,
                     seller_address: item.product.seller ? item.product.seller.address : null,
                     seller_latitude: item.product.seller ? item.product.seller.latitude : null,
                     seller_longitude: item.product.seller ? item.product.seller.longitude : null,
                     seller_profile_image: item.product.seller ? item.product.seller.profile_image : null,
                 })),
                 shipping_cost: order.shipping_cost,
-                // payment: order.payment,
             };
         });
 
@@ -127,9 +232,11 @@ const index = async(req, res, next) => {
     }
 };
 
+
 const indexCourier = async(req, res, next) => {
     try {
         const orders = await OrderModel.findAll({
+
             include: [{
                     model: UserModel,
                     as: "couriers",
@@ -167,6 +274,8 @@ const indexCourier = async(req, res, next) => {
                 },
             ],
         });
+
+        // console.log("ini user", req.user)
 
         const formattedOrders = orders.map((order) => {
             const totalQuantity = order.orderitem.reduce((acc, item) => acc + item.quantity, 0);
@@ -269,6 +378,8 @@ const create = async(req, res, next) => {
 
     const idOrder = items.map((item) => item.product_id);
 
+    // console.log("body", req.body)
+
     if (idOrder.length === 0) {
         return res.status(400).send({ message: "Data tidak ditemukan" });
     }
@@ -328,7 +439,7 @@ const create = async(req, res, next) => {
         }
     }
 
-    // Pilih kurir terdekat
+    // Pilih kurir yang online dan statusnya "ready"
     const couriers = await UserModel.findAll({
         where: {
             role: "courier",
@@ -340,6 +451,25 @@ const create = async(req, res, next) => {
     if (couriers.length === 0) {
         return res.status(400).send({ message: "Tidak ada courier yang tersedia" });
     }
+    const courierReady = await UserModel.findAll({
+        where: {
+            role: "courier",
+        },
+        include: [{
+            model: CourierModel,
+            as: "courier", // Pastikan sesuai dengan relasi yang didefinisikan
+            where: {
+                availability: "ready", // ✅ Filter berdasarkan availability di tabel Courier
+            },
+            required: true, // INNER JOIN (hambil User yang punya relasi Courier)
+        }],
+        attributes: ['id', 'latitude', 'longitude'],
+    });
+
+    if (courierReady.length === 0) {
+        return res.status(400).send({ message: "Tidak ada courier yang ready" });
+    }
+
 
     // Fungsi hitung jarak jalan
     const getRoadDistance = async(origin, destination) => {
@@ -446,6 +576,9 @@ const create = async(req, res, next) => {
         distance: totalDistance,
         shipping_cost: shipping,
     });
+
+    //ubah status kurir menjadi "unready"
+    await CourierModel.update({ availability: "unready" }, { where: { courier_id: newOrder.courier_id } });
 
     // Buka koneksi WebSocket untuk customer dan kurir
     io.emit("orderCreated", {
@@ -619,7 +752,7 @@ const cancelOrder = async(req, res, next) => {
             return res.status(404).send({ message: "Orderan tidak ditemukan" });
         }
 
-        console.log("Status awal order:", order.status);
+        // console.log("Status awal order:", order.status);
 
         if (order.status === "cancelled") {
             return res.status(400).send({ message: "Orderan sudah dibatalkan" });
@@ -642,7 +775,7 @@ const cancelOrder = async(req, res, next) => {
 
         // Periksa apakah pembaruan berhasil
         const updatedOrder = await OrderModel.findByPk(orderId);
-        console.log("Status order setelah pembaruan:", updatedOrder.status);
+        // console.log("Status order setelah pembaruan:", updatedOrder.status);
 
         return res.send({ message: "Order cancelled successfully" });
     } catch (error) {
@@ -705,7 +838,7 @@ const cancelOrder = async(req, res, next) => {
 //     }
 
 //     const image = req.file.path; // Cloudinary URL
-//     console.log("ini image yang diupload", image)
+// console.log("ini image yang diupload", image)
 
 //     // Mulai transaksi database
 //     const transaction = await sequelize.transaction();
@@ -776,7 +909,9 @@ const cancelOrder = async(req, res, next) => {
 const updateStatus = async(req, res, next) => {
     const { orderId } = req.params;
     const { status, note, availability } = req.body;
-    const currentUser = req.user.id;
+    const currentUser = req.user;
+
+    // console.log("ini current user dari payment", currentUser)
 
     // Mulai transaksi database
     const transaction = await sequelize.transaction();
@@ -853,13 +988,33 @@ const updateStatus = async(req, res, next) => {
         // 5. Simpan history perubahan status
         await HistoryModel.create({
             order_id: orderId,
-            user_id: currentUser,
+            user_id: currentUser.id,
             status,
             note: note || `Orderan dalam keadaan ${status}`,
         }, { transaction });
 
         // 6. Update availability kurir
-        await CourierModel.update({ availability }, { where: { id: currentUser }, transaction });
+        // if (currentUser.role === "courier") {
+        // await CourierModel.update({ availability }, { where: { courier_id: currentUser.id }, transaction });
+        // } else {
+        //     await CourierModel.update({ availability }, { where: { courierId }, transaction });
+        // }
+
+        // 6. Update availability kurir berdasarkan role pengguna
+        if (currentUser.role === "courier") {
+            // Jika role courier, ambil courier_id dari user yang login
+            await CourierModel.update({ availability }, { where: { courier_id: currentUser.id }, transaction });
+        } else {
+            // Jika role selain courier, ambil courier_id dari body
+            // const { courier_id } = req.body;
+
+            // if (!courier_id) {
+            //     await transaction.rollback();
+            //     return res.status(400).send({ message: "courier_id is required for non-courier users" });
+            // }
+
+            await CourierModel.update({ availability }, { where: { courier_id: order.courier_id }, transaction });
+        }
 
         // 7. Jika status adalah "completed", simpan rating untuk setiap produk
         if (status === "completed") {
@@ -872,7 +1027,7 @@ const updateStatus = async(req, res, next) => {
             // Simpan rating untuk setiap product_id ke tabel product_ratings
             const ratingsData = orderItems.map((item) => ({
                 order_id: orderId,
-                user_id: currentUser,
+                user_id: currentUser.id,
                 product_id: item.product_id,
                 rating: null, // Nilai default (opsional)
                 comment: null, // Komentar default (opsional)
@@ -882,53 +1037,152 @@ const updateStatus = async(req, res, next) => {
 
 
         }
-        // Ambil semua item dari order
-        const orderItems = order.orderitem; // Mengambil items dari order yang sudah di-include
+        // // Cek apakah ada history dengan note khusus untuk order ini
+        // const earningsHistory = await HistoryModel.findOne({
+        //     where: {
+        //         order_id: orderId,
+        //         note: 'Pesanan diterima Oleh yang bersangkutan'
+        //     },
+        //     transaction
+        // });
+        // const earningsHistoryCompleted = await HistoryModel.findOne({
+        //     where: {
+        //         order_id: orderId,
+        //         note: 'Orderan dalam keadaan completed'
+        //     },
+        //     transaction
+        // });
 
-        // Kelompokkan items berdasarkan seller_id dan hitung total amount per seller
-        const sellerEarnings = {};
+        // // Jika ada history dengan note tersebut
+        // if (earningsHistory || earningsHistoryCompleted) {
 
-        orderItems.forEach((item) => {
-            const sellerId = item.product.seller.id; // Ambil seller_id dari product
-            const itemTotal = item.quantity * item.product.price; // Hitung total harga per item
+        //     // Ambil semua item dari order
+        //     const orderItems = order.orderitem; // Mengambil items dari order yang sudah di-include
 
-            if (!sellerEarnings[sellerId]) {
-                sellerEarnings[sellerId] = 0; // Inisialisasi jika seller belum ada di objek
-            }
+        //     // Kelompokkan items berdasarkan seller_id dan hitung total amount per seller
+        //     const sellerEarnings = {};
 
-            sellerEarnings[sellerId] += itemTotal; // Tambahkan ke total pendapatan seller
+        //     orderItems.forEach((item) => {
+        //         const sellerId = item.product.seller.id; // Ambil seller_id dari product
+        //         const itemTotal = item.quantity * item.product.price; // Hitung total harga per item
+
+        //         if (!sellerEarnings[sellerId]) {
+        //             sellerEarnings[sellerId] = 0; // Inisialisasi jika seller belum ada di objek
+        //         }
+
+        //         sellerEarnings[sellerId] += itemTotal; // Tambahkan ke total pendapatan seller
+        //     });
+
+        //     // Simpan pendapatan untuk setiap seller
+        //     for (const sellerId in sellerEarnings) {
+        //         const totalAmount = sellerEarnings[sellerId]; // Total amount untuk seller
+        //         const sellerEarning = totalAmount * 0.2; // 80% dari total amount
+
+        //         await Seller_earningModel.create({
+        //             order_id: orderId,
+        //             seller_id: sellerId,
+        //             amount: totalAmount, // Total harga produk berdasarkan seller
+        //             seller_earning: sellerEarning, // 80% dari total amount
+        //             earning_date: new Date(),
+        //         }, { transaction });
+        //     }
+
+        //     // Hitung pendapatan kurir (20% dari shipping_cost)
+        //     const courierEarning = order.shipping_cost[0].shipping_cost * 0.2;
+
+        //     // Buat data pendapatan kurir
+        //     await Courier_earningModel.create({
+        //         order_id: orderId,
+        //         courier_id: order.couriers.id,
+        //         amount: order.shipping_cost[0].shipping_cost,
+        //         courier_earning: courierEarning,
+        //         earning_date: new Date(),
+        //     }, { transaction });
+
+
+
+        // }
+
+        // Cek apakah ada history dengan note khusus untuk order ini
+        // Cek apakah ada history dengan note khusus untuk order ini
+        const earningsHistory = await HistoryModel.findOne({
+            where: {
+                order_id: orderId,
+                note: 'Pesanan diterima Oleh yang bersangkutan'
+            },
+            transaction
         });
 
-        // Simpan pendapatan untuk setiap seller
-        for (const sellerId in sellerEarnings) {
-            const totalAmount = sellerEarnings[sellerId]; // Total amount untuk seller
-            const sellerEarning = totalAmount * 0.8; // 80% dari total amount
-
-            await Seller_earningModel.create({
+        const earningsHistoryCompleted = await HistoryModel.findOne({
+            where: {
                 order_id: orderId,
-                seller_id: sellerId,
-                amount: totalAmount, // Total harga produk berdasarkan seller
-                seller_earning: sellerEarning, // 80% dari total amount
-                earning_date: new Date(),
-            }, { transaction });
+                note: 'Orderan dalam keadaan completed'
+            },
+            transaction
+        });
+
+        // Jika ada history dengan note tersebut
+        if (earningsHistory || earningsHistoryCompleted) {
+            // Cek apakah order_id sudah ada di Seller_earningModel atau Courier_earningModel
+            const existingSellerEarning = await Seller_earningModel.findOne({
+                where: { order_id: orderId },
+                transaction
+            });
+
+            const existingCourierEarning = await Courier_earningModel.findOne({
+                where: { order_id: orderId },
+                transaction
+            });
+
+            // Jika belum ada data earning untuk order ini
+            if (!existingSellerEarning && !existingCourierEarning) {
+                // Ambil semua item dari order
+                const orderItems = order.orderitem;
+
+                // Kelompokkan items berdasarkan seller_id dan hitung total amount per seller
+                const sellerEarnings = {};
+
+                orderItems.forEach((item) => {
+                    const sellerId = item.product.seller.id;
+                    const itemTotal = item.quantity * item.product.price;
+
+                    if (!sellerEarnings[sellerId]) {
+                        sellerEarnings[sellerId] = 0;
+                    }
+
+                    sellerEarnings[sellerId] += itemTotal;
+                });
+
+                // Simpan pendapatan untuk setiap seller
+                for (const sellerId in sellerEarnings) {
+                    const totalAmount = sellerEarnings[sellerId];
+                    const sellerEarning = totalAmount * 0.2;
+
+                    await Seller_earningModel.create({
+                        order_id: orderId,
+                        seller_id: sellerId,
+                        amount: totalAmount,
+                        seller_earning: sellerEarning,
+                        earning_date: new Date(),
+                    }, { transaction });
+                }
+
+                // Hitung pendapatan kurir (20% dari shipping_cost)
+                const courierEarning = order.shipping_cost[0].shipping_cost * 0.2;
+
+                // Buat data pendapatan kurir
+                await Courier_earningModel.create({
+                    order_id: orderId,
+                    courier_id: order.couriers.id,
+                    amount: order.shipping_cost[0].shipping_cost,
+                    courier_earning: courierEarning,
+                    earning_date: new Date(),
+                }, { transaction });
+            }
         }
-
-        // Hitung pendapatan kurir (20% dari shipping_cost)
-        const courierEarning = order.shipping_cost[0].shipping_cost * 0.2;
-
-        // Buat data pendapatan kurir
-        await Courier_earningModel.create({
-            order_id: orderId,
-            courier_id: order.couriers.id,
-            amount: order.shipping_cost[0].shipping_cost,
-            courier_earning: courierEarning,
-            earning_date: new Date(),
-        }, { transaction });
-
 
         // Commit transaksi jika semua berhasil
         await transaction.commit();
-
         return res.send({ message: "Order status updated successfully" });
     } catch (error) {
         // Rollback transaksi jika ada error
@@ -975,5 +1229,29 @@ const updateCourierLocation = async(req, res, next) => {
     }
 };
 
+/**
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} next
+ */
 
-module.exports = { index, indexCourier, create, getOrderById, cancelOrder, updateStatus, updateCourierLocation };
+const updateCourierAvailability = async(req, res, next) => {
+    const { courierId } = req.body;
+    // const { orderId } = req.params
+
+    try {
+        if (!courierId) {
+            return res.status(400).send({ message: "Kurir tidak ditemukan atau tidak menyertakan ID kurirnya" });
+        }
+        // Update lokasi kurir di database
+        await CourierModel.update({ availability: 'ready' }, { where: { courier_id: courierId } });
+
+        return res.send({ message: "Availability kurir telah diupdate" });
+    } catch (error) {
+        console.error("Error updating courier availability:", error);
+        return res.status(500).send({ message: "Terjadi kesalahan saat memperbarui availability kurir" });
+    }
+};
+
+
+module.exports = { index, indexCourier, create, getOrderById, cancelOrder, updateStatus, updateCourierLocation, updateCourierAvailability };

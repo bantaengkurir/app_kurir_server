@@ -4,7 +4,7 @@ const router = express.Router();
 const upload = require("../config/multer");
 
 const { validateToken } = require("../middlewares/auth")
-const { index, create, getOrderById, cancelOrder, updateStatus, updateCourierLocation, indexCourier } = require("../controllers/order.controller")
+const { index, create, getOrderById, cancelOrder, updateStatus, updateCourierLocation, indexCourier, updateCourierAvailability } = require("../controllers/order.controller")
 
 // /api/babs
 router.get("/", validateToken, index);
@@ -19,7 +19,8 @@ router.put(
     ]),
     updateStatus
 );
-router.put("/update-location", validateToken, updateStatus);
+router.put("/update-location", validateToken, updateCourierLocation);
+router.put("/availability", validateToken, updateCourierAvailability);
 router.post("/", validateToken, create);
 router.put("/:orderId/cancel", validateToken, cancelOrder);
 

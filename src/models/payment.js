@@ -25,6 +25,7 @@ module.exports = (sequelize, DataTypes) => {
         user_id: DataTypes.INTEGER,
         order_id: DataTypes.INTEGER,
         courier_id: DataTypes.INTEGER,
+        midtrans_order_id: DataTypes.STRING,
         payment_method: DataTypes.ENUM('COD', 'transfer'),
         amount: DataTypes.DECIMAL,
         payment_status: DataTypes.ENUM('pending', 'process', 'cancelled', 'completed'),

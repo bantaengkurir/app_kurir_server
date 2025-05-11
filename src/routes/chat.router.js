@@ -16,7 +16,8 @@
 
 
 const express = require("express");
-const { getMessages, sendMessage, getUsersForSidebar } = require("../controllers/chat.controller")
+const upload = require('../middlewares/upload');
+const { getMessages, sendMessage, getUsersForSidebar, sendMessageWeb } = require("../controllers/chat.controller")
 
 const router = express.Router();
 
@@ -25,6 +26,7 @@ const { validateToken } = require("../middlewares/auth")
 router.get("/users", validateToken, getUsersForSidebar);
 router.get("/:id", validateToken, getMessages);
 
-router.post("/send/:id", validateToken, sendMessage);
+router.post("/send/:id", validateToken, upload.single('image'), sendMessage);
+router.post("/send-web/:id", validateToken, upload.single('image'), sendMessageWeb);
 
 module.exports = router;

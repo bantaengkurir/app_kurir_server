@@ -5,8 +5,8 @@ const router = express.Router();
 const { validateToken } = require("../middlewares/auth")
 const {
     // index, indexSeller, showDesc, 
-    index
-    // indexSallery
+    indexCourier,
+    indexSeller
     //  create, remove, update 
 } = require("../controllers/earning.controller")
 
@@ -14,7 +14,8 @@ const {
 // router.get("/", index);
 // router.get("/seller", validateToken, indexSeller);
 // router.get("/desc", showDesc);
-router.get("/", validateToken, index);
+router.get("/", validateToken, indexCourier);
+router.get("/seller", validateToken, indexSeller);
 // router.get("/:id", validateToken, show);
 // router.delete("/:productId", validateToken, remove);
 // router.put("/:productId", validateToken, upload.single("image_url"), update);

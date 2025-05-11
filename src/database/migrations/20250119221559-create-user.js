@@ -56,6 +56,10 @@ module.exports = {
             status: {
                 type: Sequelize.STRING
             },
+            refresh_token: {
+                type: DataTypes.STRING,
+                allowNull: true
+            },
             created_at: {
                 allowNull: false,
                 defaultValue: Sequelize.fn("NOW"),

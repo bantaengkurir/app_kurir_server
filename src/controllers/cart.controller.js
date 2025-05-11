@@ -173,6 +173,8 @@ const update = async(req, res, _next) => {
                 id: cartItem.product_id,
             },
         });
+        // console.log("product", product);
+        // console.log("cartItem", cartItem);
 
         if (!product) {
             return res.status(404).send({ message: "Product not found" });
