@@ -1,4 +1,4 @@
-const { user: UserModel, order: OrderModel, shipping_cost: ShippingModel, payment: PaymentModel, courier_earning: Courer_earningModel } = require("../models");
+const { user: UserModel, order: OrderModel, shipping_cost: ShippingModel, payment: PaymentModel, courier_earning: Courer_earningModel, courier: CourierModel } = require("../models");
 
 
 /**
@@ -108,10 +108,100 @@ const show = async(req, res, next) => {
         return res.status(500).send({ message: "Internal Server Error" });
     }
 }
+const showCourier = async(req, res, next) => {
+    try {
+        const userId = req.user.id; // Ambil dari token JWT (validateToken)
+
+        const courier = await CourierModel.findOne({
+            where: { courier_id: userId }
+        });
+
+        if (!courier) {
+            return res.status(404).send({
+                message: "Courier tidak ditemukan",
+                data: null
+            });
+        }
+
+        return res.send({
+            message: "success",
+            data: courier,
+        });
+
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({ message: "Internal Server Error" });
+    }
+}
 
 
+const createCourier = async(req, res, _next) => {
+    try {
+        const currentUser = req.user;
+        const { vehicle_type, vehicle_plate } = req.body;
+
+
+        if (!vehicle_type || !vehicle_plate) {
+            return res.status(400).send({ message: "Permintaan tidak valid, pastikan semua data diisi" });
+        }
+
+        const courierExist = await CourierModel.findOne({ where: { courier_id: currentUser.id } });
+        if (courierExist) {
+            return res.status(401).json({ message: "Profile sudah ada" });
+        }
+
+        const newProfile = await CourierModel.create({
+            courier_id: currentUser.id,
+            vehicle_type,
+            vehicle_plate,
+        });
+
+        return res.send({
+            message: "Profile created successfully",
+            data: newProfile,
+        });
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({ message: "Internal Server Error" });
+    }
+};
+
+const updateCourier = async(req, res, _next) => {
+    try {
+        const currentUser = req.user;
+        const { vehicle_type, vehicle_plate, availability } = req.body;
+
+        // if (!vehicle_type || !vehicle_plate) {
+        //     return res.status(400).send({ message: "Permintaan tidak valid, pastikan semua data diisi" });
+        // }
+
+        const courierExist = await CourierModel.findOne({ where: { courier_id: currentUser.id } });
+        if (!courierExist) {
+            return res.status(401).json({ message: "Profile tidak ditemukan" });
+        }
+
+        const updatedProfile = await CourierModel.update({
+            vehicle_type,
+            vehicle_plate,
+            availability
+        }, {
+            where: { courier_id: currentUser.id }
+        });
+
+        return res.send({
+            message: "Profile updated successfully",
+            data: updatedProfile,
+        });
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({ message: "Internal Server Error" });
+    }
+}
 
 module.exports = {
     indexSallery,
     show,
+    createCourier,
+    showCourier,
+    updateCourier
 };

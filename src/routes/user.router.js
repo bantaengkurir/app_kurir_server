@@ -10,17 +10,21 @@ const { validateToken } = require("../middlewares/auth")
 const {
     // index, indexSeller, showDesc, 
     show,
-    indexSallery
+    indexSallery,
+    createCourier,
+    showCourier,
+    updateCourier
     //  create, remove, update 
 } = require("../controllers/user.controller")
 
 // /api/babs
 // router.get("/", index);
 // router.get("/seller", validateToken, indexSeller);
-// router.get("/desc", showDesc);
 router.get("/couriersallery", validateToken, indexSallery);
+router.get("/my-courier", validateToken, showCourier);
 router.get("/:id", validateToken, show);
-// router.post("/", validateToken, upload.single("image_url"), create);
+router.post("/create-courier", validateToken, createCourier);
+router.put("/update-courier", validateToken, updateCourier);
 // router.delete("/:productId", validateToken, remove);
 // router.put("/:productId", validateToken, upload.single("image_url"), update);
 

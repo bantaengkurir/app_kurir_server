@@ -808,6 +808,7 @@ app.use((req, res, next) => {
     next();
 });
 
+
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/couriers', userRouter);
@@ -823,6 +824,8 @@ app.use("/api/midtrans", midtransRouter);
 app.use('/api/calls', callRouter);
 
 app.use(bodyParser.json());
+const initCourierAvailabilityCron = require('./middlewares/crons');
+initCourierAvailabilityCron();
 
 // **Port Listening**
 const PORT = process.env.SERVER_PORT || 8001;
