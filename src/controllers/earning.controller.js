@@ -89,6 +89,93 @@ const indexCourier = async(req, res, next) => {
     }
 };
 
+// const courierearningId = async(req, res, next) => {
+//     const { courier_id } = req.body;
+//     console.log("Received courier_id:", courier_id); // Debugging
+//     try {
+//         const earning = await Courier_earningModel.findAll({
+//             where: {
+//                 courier_id,
+//             },
+//         });
+//         if (!earning) {
+//             return res.status(404).send({
+//                 message: "Earning not found",
+//                 data: null
+//             });
+//         }
+//         return res.send({
+//             message: "Success",
+//             data: earning
+//         });
+//     } catch (error) {
+//         console.error("Error:", error);
+//         return res.status(500).send({
+//             message: "Internal Server Error"
+//         });
+//     }
+// };
+
+const courierearningId = async(req, res) => {
+    const courier_id = req.query.courier_id;
+
+    if (!courier_id) {
+        return res.status(400).send({
+            message: "courier_id is required",
+            data: []
+        });
+    }
+
+    try {
+        const earnings = await Courier_earningModel.findAll({
+            where: { courier_id },
+            order: [
+                    ['createdAt', 'DESC']
+                ] // Urutkan dari yang terbaru
+        });
+
+        return res.send({
+            message: "Success",
+            data: earnings || [] // Pastikan selalu mengembalikan array
+        });
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({
+            message: "Internal Server Error",
+            data: []
+        });
+    }
+};
+const sellerEarningById = async(req, res) => {
+    const { id } = req.params;
+
+    console.log("Received seller_id:", id); // Debugging
+
+    if (!id) {
+        return res.status(400).send({
+            message: "seller_id is required",
+            data: []
+        });
+    }
+
+    try {
+        const earnings = await Seller_earningModel.findAll({
+            where: { seller_id: id },
+        });
+
+        return res.send({
+            message: "Success",
+            data: earnings || [] // Pastikan selalu mengembalikan array
+        });
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({
+            message: "Internal Server Error",
+            data: []
+        });
+    }
+};
+
 
 const indexSeller = async(req, res, next) => {
     const { date } = req.query; // Ambil parameter tanggal dari query
@@ -139,7 +226,7 @@ const indexSeller = async(req, res, next) => {
 
 
 
-module.exports = { indexCourier, indexSeller };
+module.exports = { indexCourier, indexSeller, courierearningId, sellerEarningById };
 
 
 // const { Op } = require("sequelize");

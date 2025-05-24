@@ -1,4 +1,5 @@
-const { user: UserModel, product: ProductModel, review: ReviewModel } = require("../models");
+const multer = require("multer");
+const { user: UserModel, product: ProductModel, review: ReviewModel, variant: VariantModel } = require("../models");
 
 /**
  * @param {import("express").Request} req
@@ -177,10 +178,10 @@ const show = async(req, res, next) => {
 
         const product = await ProductModel.findByPk(id, {
             attributes: ["id", "name", "description", "price", "stock", "image_url"],
-            // include: [{
-            //     model: CategoryModel,
-            //     as: "category",
-            // }],
+            include: [{
+                model: VariantModel,
+                as: "variant",
+            }],
         });
 
         if (!product) {
@@ -211,7 +212,9 @@ const show = async(req, res, next) => {
 const create = async(req, res, _next) => {
     try {
         const currentUser = req.user;
-        const { name, description, image_url, price, stock, category } = req.body;
+        const { seller_id, name, description, image_url, price, stock, category } = req.body;
+
+        console.log('id params', seller_id)
 
         console.log("Request body:", req.body);
 
@@ -223,16 +226,29 @@ const create = async(req, res, _next) => {
 
         console.log("image", image)
 
-        if (currentUser.role !== 'seller') {
-            return res.status(403).send({ message: "Hanya seller yang dapat menambahkan produk" });
+        // Perbaikan logika pengecekan role
+        if (currentUser.role !== 'seller' && currentUser.role !== 'admin') {
+            return res.status(403).send({ message: "Hanya seller atau admin yang dapat menambahkan produk" });
         }
 
         if (!name || !description || !price || !stock || !category) {
             return res.status(400).send({ message: "Permintaan tidak valid, pastikan semua data diisi" });
         }
+        // Tentukan seller_id berdasarkan role
+        let productSellerId;
+        if (currentUser.role === 'admin') {
+            // Untuk admin, gunakan seller_id dari params
+            if (!seller_id) {
+                return res.status(400).send({ message: "seller_id diperlukan untuk admin" });
+            }
+            productSellerId = seller_id;
+        } else {
+            // Untuk seller, gunakan id user yang login
+            productSellerId = currentUser.id;
+        }
 
         const newProduct = await ProductModel.create({
-            seller_id: currentUser.id,
+            seller_id: productSellerId,
             name,
             description,
             image_url: image,
@@ -263,11 +279,75 @@ const create = async(req, res, _next) => {
 
 
 
+// const update = async(req, res, _next) => {
+//     try {
+//         const currentUser = req.user;
+//         const { productId } = req.params;
+//         const image = req.file.path;
+//         const { name, description, image_url, price, stock, category } = req.body;
+
+//         console.log("request body update", req.body)
+
+
+//         // Memastikan productId tidak undefined
+//         if (!productId) {
+//             return res.status(400).send({ message: "Product ID tidak ditemukan" });
+//         }
+
+//         // Memastikan hanya seller yang dapat memperbarui produk
+//         if (currentUser.role !== 'seller') {
+//             return res.status(403).send({ message: "Hanya seller yang dapat memperbarui produk" });
+//         }
+
+//         // Memastikan produk milik seller yang sedang login
+//         const product = await ProductModel.findOne({
+//             where: {
+//                 id: productId,
+//                 seller_id: currentUser.id,
+//             },
+//         });
+
+//         if (!product) {
+//             return res.status(404).send({ message: "Produk tidak ditemukan atau Anda tidak memiliki izin untuk memperbaruinya" });
+//         }
+
+//         // Memvalidasi inputan dari user
+//         if (!name || !description || !stock) {
+//             return res.status(400).send({ message: "Tidak ada data yang diperbarui" });
+//         }
+
+//         // Update produk
+//         const updatedProduct = await product.update({
+//             name,
+//             image_url: image,
+//             description,
+//             price,
+//             stock,
+//             category,
+//         });
+
+//         return res.send({
+//             message: "Product updated successfully",
+//             data: updatedProduct,
+//         });
+//     } catch (error) {
+//         if (error instanceof multer.MulterError) {
+//             // Tangani error Multer
+//             return res.status(400).json({ message: error.message });
+//         } else if (error.message === "File harus berupa gambar!") {
+//             return res.status(400).json({ message: error.message });
+//         } else {
+//             // Error lainnya
+//             console.error("Error:", error.message); // Hanya untuk debugging
+//             return res.status(500).json({ message: "Internal server error" });
+//         }
+//     }
+// };
 const update = async(req, res, _next) => {
     try {
         const currentUser = req.user;
         const { productId } = req.params;
-        const image = req.file.path;
+        const image = req.file ? req.file.path : null; // Menjadi null jika tidak ada file
         const { name, description, image_url, price, stock, category } = req.body;
 
         console.log("request body update", req.body)
@@ -279,15 +359,19 @@ const update = async(req, res, _next) => {
         }
 
         // Memastikan hanya seller yang dapat memperbarui produk
-        if (currentUser.role !== 'seller') {
-            return res.status(403).send({ message: "Hanya seller yang dapat memperbarui produk" });
+        // if (currentUser.role !== 'seller') {
+        //     return res.status(403).send({ message: "Hanya seller yang dapat memperbarui produk" });
+        // }
+        // Perbaikan logika pengecekan role
+        if (currentUser.role !== 'seller' && currentUser.role !== 'admin') {
+            return res.status(403).send({ message: "Hanya seller atau admin yang dapat menambahkan produk" });
         }
+
 
         // Memastikan produk milik seller yang sedang login
         const product = await ProductModel.findOne({
             where: {
                 id: productId,
-                seller_id: currentUser.id,
             },
         });
 
@@ -303,7 +387,7 @@ const update = async(req, res, _next) => {
         // Update produk
         const updatedProduct = await product.update({
             name,
-            image_url: image,
+            image_url: image || image_url || product.image_url,
             description,
             price,
             stock,
@@ -328,6 +412,59 @@ const update = async(req, res, _next) => {
     }
 };
 
+// const update = async(req, res) => {
+//     try {
+//         const currentUser = req.user;
+//         const { productId } = req.params;
+//         const { name, description, price, stock, category } = req.body;
+//         const image = req.file.path; // Gambar bersifat optional
+
+//         // 1. Validasi dasar
+//         if (!productId) {
+//             return res.status(400).json({ message: "Product ID diperlukan" });
+//         }
+
+//         // 2. Cari produk yang akan diupdate
+//         const product = await ProductModel.findByPk(productId);
+//         if (!product) {
+//             return res.status(404).json({ message: "Produk tidak ditemukan" });
+//         }
+
+//         // 3. Authorization Check
+//         if (currentUser.role === 'seller' && product.seller_id.toString() !== currentUser.id) {
+//             return res.status(403).json({
+//                 message: "Akses ditolak - Anda bukan pemilik produk ini"
+//             });
+//         }
+
+//         // 4. Siapkan data update
+//         const updateData = {
+//             name: name || product.name,
+//             description: description || product.description,
+//             price: price || product.price,
+//             stock: stock || product.stock,
+//             category: category || product.category,
+//             ...(image && { image_url: image }) // Update gambar hanya jika ada
+//         };
+
+//         // 5. Proses update
+//         const updatedProduct = await product.update(
+//             productId,
+//             updateData, { new: true } // Return produk yang sudah diupdate
+//         );
+
+//         return res.json({
+//             message: "Produk berhasil diupdate",
+//             data: updatedProduct
+//         });
+
+//     } catch (error) {
+//         console.error("Error:", error);
+//         return res.status(500).json({
+//             message: error.message || "Internal server error"
+//         });
+//     }
+// };
 
 /**
  * @param {import("express").Request} req
@@ -335,41 +472,94 @@ const update = async(req, res, _next) => {
  * @param {import("express").NextFunction} _next
  */
 
-const remove = async(req, res, _next) => {
+// const remove = async(req, res, _next) => {
+//     try {
+//         const currentUser = req.user;
+//         const { productId } = req.params;
+
+//         console.log("id", productId)
+
+//         // Perbaikan logika pengecekan role
+//         if (currentUser.role !== 'seller' && currentUser.role !== 'admin') {
+//             return res.status(403).send({ message: "Hanya seller atau admin yang dapat menambahkan produk" });
+//         }
+
+
+//         const product = await ProductModel.findOne({
+//             where: {
+//                 id: productId,
+//                 seller_id: currentUser.id, // Memastikan produk milik seller yang sedang login
+//             },
+//         });
+
+//         if (!product) {
+//             return res.status(404).send({ message: "Produk tidak ditemukan atau Anda tidak memiliki izin untuk menghapusnya" });
+//         }
+
+//         await ProductModel.destroy({
+//             where: {
+//                 id: productId,
+//             },
+//         });
+
+//         return res.send({ message: "Produk berhasil dihapus" });
+//     } catch (error) {
+//         console.error("Error:", error);
+//         return res.status(500).send({ message: "Internal Server Error" });
+//     }
+// };
+
+const remove = async(req, res) => {
     try {
         const currentUser = req.user;
-        const { productId } = req.params;
+        const { productId } = req.body; // Sekarang mengambil dari body
 
-        console.log("id", productId)
+        console.log('Delete request received:', { productId, user: currentUser.id });
 
-        // Memastikan hanya seller yang dapat menghapus produk
-        if (currentUser.role !== 'seller') {
-            return res.status(403).send({ message: "Hanya seller yang dapat menghapus produk" });
+        if (!productId) {
+            return res.status(400).json({ message: "Product ID is required" });
         }
 
+        // Validasi role
+        if (currentUser.role !== 'seller' && currentUser.role !== 'admin') {
+            return res.status(403).json({
+                message: "Hanya seller atau admin yang dapat menghapus produk"
+            });
+        }
+
+        // Cari produk termasuk seller_id untuk validasi kepemilikan
         const product = await ProductModel.findOne({
-            where: {
-                id: productId,
-                seller_id: currentUser.id, // Memastikan produk milik seller yang sedang login
-            },
+            where: { id: productId },
+            attributes: ['id', 'seller_id']
         });
 
         if (!product) {
-            return res.status(404).send({ message: "Produk tidak ditemukan atau Anda tidak memiliki izin untuk menghapusnya" });
+            return res.status(404).json({
+                message: "Produk tidak ditemukan"
+            });
         }
 
-        await ProductModel.destroy({
-            where: {
-                id: productId,
-            },
+        // Validasi kepemilikan (kecuali admin)
+        if (currentUser.role !== 'admin' && product.seller_id !== currentUser.id) {
+            return res.status(403).json({
+                message: "Anda tidak memiliki izin untuk menghapus produk ini"
+            });
+        }
+
+        // Lakukan penghapusan
+        await ProductModel.destroy({ where: { id: productId } });
+
+        return res.json({
+            success: true,
+            message: "Produk berhasil dihapus"
         });
 
-        return res.send({ message: "Produk berhasil dihapus" });
     } catch (error) {
-        console.error("Error:", error);
-        return res.status(500).send({ message: "Internal Server Error" });
+        console.error("Delete product error:", error);
+        return res.status(500).json({
+            message: "Terjadi kesalahan pada server"
+        });
     }
 };
-
 
 module.exports = { index, indexSeller, showDesc, show, create, remove, update };

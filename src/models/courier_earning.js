@@ -15,6 +15,10 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: "courier_id",
                 as: "courier"
             })
+            courier_earning.belongsTo(models.courier, {
+                foreignKey: "courier_id",
+                as: "couriers"
+            });
         }
     }
     courier_earning.init({

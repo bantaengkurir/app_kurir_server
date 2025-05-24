@@ -15,6 +15,10 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: "courier_id",
                 as: "courier"
             })
+            courier.hasMany(models.courier_earning, {
+                foreignKey: "courier_id",
+                as: "earnings"
+            });
         }
     }
     courier.init({
@@ -22,7 +26,8 @@ module.exports = (sequelize, DataTypes) => {
         vehicle_type: DataTypes.STRING,
         vehicle_plate: DataTypes.STRING,
         availability: DataTypes.ENUM("ready", "unready"),
-        rating: DataTypes.DECIMAL
+        rating: DataTypes.DECIMAL,
+        order_status: DataTypes.ENUM("free", "delivered"),
     }, {
         sequelize,
         modelName: 'courier',

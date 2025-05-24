@@ -376,6 +376,8 @@ const create = async(req, res, next) => {
     const { latitude, longitude } = shipping_cost || {};
     const currentUser = req.user;
 
+    console.log("body create product", req.body);
+
     const idOrder = items.map((item) => item.product_id);
 
     // console.log("body", req.body)
@@ -908,7 +910,7 @@ const cancelOrder = async(req, res, next) => {
 
 const updateStatus = async(req, res, next) => {
     const { orderId } = req.params;
-    const { status, note, availability } = req.body;
+    const { status, note, availability, order_status } = req.body;
     const currentUser = req.user;
 
     // console.log("ini current user dari payment", currentUser)
@@ -1003,7 +1005,7 @@ const updateStatus = async(req, res, next) => {
         // 6. Update availability kurir berdasarkan role pengguna
         if (currentUser.role === "courier") {
             // Jika role courier, ambil courier_id dari user yang login
-            await CourierModel.update({ availability }, { where: { courier_id: currentUser.id }, transaction });
+            await CourierModel.update({ availability, order_status }, { where: { courier_id: currentUser.id }, transaction });
         } else {
             // Jika role selain courier, ambil courier_id dari body
             // const { courier_id } = req.body;
@@ -1013,7 +1015,7 @@ const updateStatus = async(req, res, next) => {
             //     return res.status(400).send({ message: "courier_id is required for non-courier users" });
             // }
 
-            await CourierModel.update({ availability }, { where: { courier_id: order.courier_id }, transaction });
+            await CourierModel.update({ availability, order_status }, { where: { courier_id: order.courier_id }, transaction });
         }
 
         // 7. Jika status adalah "completed", simpan rating untuk setiap produk
@@ -1181,8 +1183,30 @@ const updateStatus = async(req, res, next) => {
             }
         }
 
+
         // Commit transaksi jika semua berhasil
         await transaction.commit();
+        // Kirim update real-time via socket.io
+        if (io) {
+            // Update status order
+            io.emit('orderStatusUpdated', {
+                orderId,
+                newStatus: status,
+                updatedAt: new Date()
+            });
+
+            // Update availability courier
+            if (availability) {
+                const courierId = currentUser.role === "courier" ? currentUser.id : order.courier_id;
+                io.emit('courierAvailabilityChanged', {
+                    courierId,
+                    availability,
+                    lastUpdated: new Date()
+                });
+            }
+        }
+
+
         return res.send({ message: "Order status updated successfully" });
     } catch (error) {
         // Rollback transaksi jika ada error

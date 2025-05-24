@@ -2,32 +2,34 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
     async up(queryInterface, Sequelize) {
-        await queryInterface.createTable('couriers', {
+        await queryInterface.createTable('variants', {
             id: {
                 allowNull: false,
                 autoIncrement: true,
                 primaryKey: true,
                 type: Sequelize.INTEGER
             },
-            courier_id: {
+            product_id: {
                 type: Sequelize.INTEGER
             },
-            vehicle_type: {
+            name: {
                 type: Sequelize.STRING
             },
-            vehicle_plate: {
-                type: Sequelize.STRING
+            img_url: {
+                type: Sequelize.TEXT
             },
-            availability: {
-                type: Sequelize.ENUM("ready", "unready"),
-                defaultValue: "unready"
-            },
-            rating: {
+            price: {
                 type: Sequelize.DECIMAL
             },
-            order_status: {
-                type: Sequelize.ENUM('free', 'delivered'),
-                defaultValue: 'free'
+            sku: {
+                type: Sequelize.STRING
+            },
+            stock: {
+                type: Sequelize.INTEGER
+            },
+            is_available: {
+                type: Sequelize.BOOLEAN,
+                defaultValue: true
             },
             created_at: {
                 allowNull: false,
@@ -42,6 +44,6 @@ module.exports = {
         });
     },
     async down(queryInterface, Sequelize) {
-        await queryInterface.dropTable('couriers');
+        await queryInterface.dropTable('variants');
     }
 };

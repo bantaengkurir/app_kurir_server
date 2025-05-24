@@ -343,6 +343,7 @@ const login = async(req, res) => {
             phone_number: user.phone_number,
             profile_image: user.profile_image,
             role: user.role,
+            createdAt: user.createdAt,
             token: null, // Token tidak dikirim di body untuk web
         };
 

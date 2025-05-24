@@ -194,6 +194,7 @@ io.on("connection", async(socket) => {
         try {
             // Update status ke online
             await UserModel.update({ status: "online" }, { where: { id: userId } });
+            io.emit("user-status-changed", { userId, status: "online" });
             console.log(`User ${userId} is now online`);
 
             // Cek apakah user adalah courier
@@ -210,7 +211,7 @@ io.on("connection", async(socket) => {
                     if (updatedUser && updatedUser.role === "courier") {
                         socket.emit("requestLocationUpdate");
                     }
-                }, 15000); // Update setiap 30 detik
+                }, 30000); // Update setiap 30 detik
 
                 // Simpan interval di socket
                 socket.locationInterval = locationInterval;
@@ -337,6 +338,7 @@ io.on("connection", async(socket) => {
 
             try {
                 await UserModel.update({ status: "offline" }, { where: { id: userId } });
+                io.emit("user-status-changed", { userId, status: "offline" });
                 console.log(`User ${userId} is now offline`);
 
                 // Hentikan interval lokasi jika user adalah courier

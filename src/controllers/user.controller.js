@@ -1,4 +1,223 @@
-const { user: UserModel, order: OrderModel, shipping_cost: ShippingModel, payment: PaymentModel, courier_earning: Courer_earningModel, courier: CourierModel } = require("../models");
+const { where } = require("sequelize");
+const { user: UserModel, product: ProductModel, order: OrderModel, shipping_cost: ShippingModel, payment: PaymentModel, courier_earning: Courier_earningModel, courier: CourierModel } = require("../models");
+
+
+/**
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} _next
+ */
+
+// const indexUser = async(req, res, next) => {
+//     try {
+//         // Cek apakah user yang sedang login adalah admin
+//         if (req.user.role !== "admin") {
+//             return res.status(403).send({
+//                 message: "Forbidden: You are not allowed to access this resource.",
+//             });
+//         }
+
+//         const users = await UserModel.findAll({
+//             attributes: ["id", "name", "email", "address", "phone_number", "profile_image", "role", "gender", "status", "is_verified", "created_at"],
+//         });
+
+//         return res.send({
+//             message: "success",
+//             data: users,
+//         });
+
+//     } catch (error) {
+//         console.error("Error:", error);
+//         return res.status(500).send({ message: "Internal Server Error" });
+//     }
+// }
+
+const indexUser = async(req, res, next) => {
+    try {
+        // Cek apakah user yang sedang login adalah admin
+        if (req.user.role !== "admin") {
+            return res.status(403).send({
+                message: "Forbidden: You are not allowed to access this resource.",
+            });
+        }
+
+        // Pertama ambil semua user dengan data dasar
+        const users = await UserModel.findAll({
+            attributes: ["id", "name", "email", "address", "phone_number",
+                "profile_image", "role", "gender", "status", "is_verified", "created_at"
+            ],
+        });
+        // Kemudian untuk setiap user, ambil asosiasi berdasarkan role
+        const usersWithAssociations = await Promise.all(users.map(async(user) => {
+            const userJson = user.toJSON();
+
+            switch (user.role) {
+                case 'customer':
+                    userJson.orders = await OrderModel.findAll({
+                        where: { user_id: user.id }
+                    });
+                    break;
+                case 'seller':
+                    userJson.products = await ProductModel.findAll({
+                        where: { seller_id: user.id }
+                    });
+                    break;
+                case 'courier':
+                    userJson.courier = await CourierModel.findOne({
+                        where: { courier_id: user.id },
+                    });
+                    userJson.orders = await OrderModel.findAll({
+                        where: { courier_id: user.id }
+                    });
+                    break;
+            }
+
+            return userJson;
+        }));
+
+        return res.send({
+            message: "success",
+            data: usersWithAssociations,
+        });
+
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({ message: "Internal Server Error" });
+    }
+}
+
+const indexCourier = async(req, res, next) => {
+    try {
+        // Cek apakah user yang sedang login adalah admin
+        if (req.user.role !== "admin") {
+            return res.status(403).send({
+                message: "Forbidden: You are not allowed to access this resource.",
+            });
+        }
+
+        const couriers = await UserModel.findAll({
+            attributes: ["id", "name", "email", "address", "phone_number", "profile_image", "role", "gender", "status", "is_verified", "created_at"],
+            where: {
+                role: "courier"
+            },
+            include: [{
+                model: CourierModel,
+                as: "courier",
+            }],
+        });
+
+        return res.send({
+            message: "success",
+            data: couriers,
+        });
+
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({ message: "Internal Server Error" });
+    }
+}
+
+const indexSeller = async(req, res, next) => {
+    try {
+        // Cek apakah user yang sedang login adalah admin
+        if (req.user.role !== "admin") {
+            return res.status(403).send({
+                message: "Forbidden: You are not allowed to access this resource.",
+            });
+        }
+
+        const sellers = await UserModel.findAll({
+            attributes: ["id", "name", "email", "address", "phone_number", "profile_image", "role", "gender", "status", "is_verified", "created_at"],
+            where: {
+                role: "seller"
+            },
+            include: [{
+                model: ProductModel,
+                as: "product",
+            }],
+        });
+
+        return res.send({
+            message: "success",
+            data: sellers,
+        });
+
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({ message: "Internal Server Error" });
+    }
+}
+
+
+
+
+/**
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} _next
+ */
+
+const showUsers = async(req, res, next) => {
+    try {
+        const { id } = req.params;
+
+        if (req.user.role !== "admin") {
+            return res.status(403).send({
+                message: "Forbidden: You are not allowed to access this resource.",
+            });
+        }
+
+        // Cari user tanpa include untuk menentukan role
+        const user = await UserModel.findByPk(id, {
+            attributes: ["id", "role"]
+        });
+
+        if (!user) {
+            return res.status(404).send({
+                message: "User tidak ditemukan",
+                data: null
+            });
+        }
+
+        // Tentukan include berdasarkan role user
+        let includeModels;
+        switch (user.role) {
+            case 'customer':
+                includeModels = [{ model: OrderModel, as: "order" }];
+                break;
+            case 'seller':
+                includeModels = [{ model: ProductModel, as: "product" }];
+                break;
+            case 'courier':
+                includeModels = [
+                    { model: CourierModel, as: "courier" },
+                    { model: OrderModel, as: "orders" }
+                ];
+                break;
+            default:
+                return res.status(403).send({
+                    message: "Forbidden: User role tidak valid",
+                });
+        }
+
+        // Ambil data lengkap user dengan include yang sesuai
+        const fullUser = await UserModel.findByPk(id, {
+            attributes: ["id", "name", "email", "address", "phone_number",
+                "profile_image", "role", "status", "is_verified", "createdAt"
+            ],
+            include: includeModels
+        });
+
+        return res.send({
+            message: "success",
+            data: fullUser,
+        });
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({ message: "Internal Server Error" });
+    }
+};
+
 
 
 /**
@@ -199,6 +418,10 @@ const updateCourier = async(req, res, _next) => {
 }
 
 module.exports = {
+    indexUser,
+    indexCourier,
+    indexSeller,
+    showUsers,
     indexSallery,
     show,
     createCourier,
