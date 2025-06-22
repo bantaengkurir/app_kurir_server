@@ -169,6 +169,21 @@ const register = async(req, res, next) => {
 
 
     try {
+        // Validasi format email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ message: "Format email tidak valid" });
+        }
+
+        // Validasi password
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,}$/;
+        if (!passwordRegex.test(password)) {
+            return res.status(400).json({
+                message: "Password harus mengandung minimal 8 karakter, 1 huruf besar, 1 huruf kecil, 1 angka, dan 1 simbol"
+            });
+        }
+
+
         // Pengecekan email
         const userExist = await UserModel.findOne({ where: { email } });
         if (userExist) {
@@ -681,29 +696,73 @@ const logoutUser = async(req, res) => {
 
 
 
+// const logoutUserWeb = async(req, res) => {
+//     try {
+//         // Mengambil ID pengguna dari cookie
+//         const userId = req.cookies.jwt ? decodeJwt(req.cookies.jwt).id : null;
+
+//         if (!userId) {
+//             return res.status(400).json({ message: "User not authenticated" });
+//         }
+
+//         // Mengubah status user menjadi 'offline'
+//         await UserModel.update({ status: 'offline' }, { where: { id: userId } });
+
+//         // Menghapus cookie JWT
+//         res.clearCookie("jwt", {
+//             httpOnly: true,
+//             secure: process.env.NODE_ENV !== 'development', // Pastikan `secure: true` di produksi
+//             sameSite: 'strict',
+//         });
+
+//         return res.status(200).json({ message: "Successfully logged out and user is offline." });
+//     } catch (err) {
+//         console.error(err); // Untuk mempermudah debugging
+//         res.status(500).json({ message: "Internal Server Error" });
+//     }
+// };
+
 const logoutUserWeb = async(req, res) => {
     try {
-        // Mengambil ID pengguna dari cookie
-        const userId = req.cookies.jwt ? decodeJwt(req.cookies.jwt).id : null;
+        // 1. Dapatkan userId dari cookie JWT (jika ada)
+        const token = req.cookies.jwt;
+        let userId = null;
 
-        if (!userId) {
-            return res.status(400).json({ message: "User not authenticated" });
+        if (token) {
+            try {
+                userId = decodeJwt(token).id;
+            } catch (err) {
+                // Jika JWT invalid/expired, anggap user perlu logout paksa
+                console.warn("Invalid/expired JWT during logout");
+            }
         }
 
-        // Mengubah status user menjadi 'offline'
-        await UserModel.update({ status: 'offline' }, { where: { id: userId } });
+        // 2. Update status user ke 'offline' (jika userId valid)
+        if (userId) {
+            await UserModel.update({ status: 'offline' }, { where: { id: userId } });
+        }
 
-        // Menghapus cookie JWT
+        // 3. Hapus cookie JWT (tanpa peduli apakah userId ada/tidak)
         res.clearCookie("jwt", {
             httpOnly: true,
-            secure: process.env.NODE_ENV !== 'development', // Pastikan `secure: true` di produksi
+            secure: process.env.NODE_ENV !== 'development',
             sameSite: 'strict',
+            path: '/', // ← Pastikan path sama dengan saat cookie dibuat
         });
 
-        return res.status(200).json({ message: "Successfully logged out and user is offline." });
+        // 4. Hapus cookie tambahan jika ada
+        res.clearCookie("otherCookieName");
+
+        return res.status(200).json({
+            success: true,
+            message: "Logout successful"
+        });
     } catch (err) {
-        console.error(err); // Untuk mempermudah debugging
-        res.status(500).json({ message: "Internal Server Error" });
+        console.error("Logout error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error during logout"
+        });
     }
 };
 

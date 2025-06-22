@@ -40,13 +40,13 @@ module.exports = (sequelize, DataTypes) => {
                 //     as: "courierlocation"
                 // })
             user.hasMany(models.order, {
-                foreignKey: "user_id",
-                as: "order"
-            })
-            user.hasMany(models.courier_rating, {
-                foreignKey: "user_id",
-                as: "user_rating"
-            })
+                    foreignKey: "user_id",
+                    as: "order"
+                })
+                // user.hasMany(models.courier_rating, {
+                //     foreignKey: "user_id",
+                //     as: "user_rating"
+                // })
             user.hasMany(models.courier_rating, {
                 foreignKey: "courier_id",
                 as: "courier_rating"

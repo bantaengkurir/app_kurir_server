@@ -795,7 +795,7 @@ const callRouter = require('./routes/call.router');
 app.use(cookieParser());
 app.use(
     cors({
-        origin: ["*", "http://localhost:5173", "http://localhost:5174"], // URL frontend Anda
+        origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175"], // URL frontend Anda
         credentials: true, // Mengizinkan pengiriman cookie bersama permintaan
         exposedHeaders: ['set-cookie', 'authorization']
     })

@@ -11,6 +11,22 @@ module.exports = (sequelize, DataTypes) => {
          */
         static associate(models) {
             // define association here
+            variant.hasMany(models.orderitem, {
+                foreignKey: "variant_id",
+                as: "orderitem"
+            })
+            variant.hasMany(models.cart, {
+                foreignKey: "variant_id",
+                as: "cart"
+            })
+            variant.hasMany(models.promo, {
+                foreignKey: "variant_id",
+                as: "promo"
+            })
+            variant.hasMany(models.review, {
+                foreignKey: "variant_id",
+                as: "review"
+            })
             variant.belongsTo(models.product, {
                 foreignKey: "product_id",
                 as: "product"

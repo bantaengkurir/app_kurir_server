@@ -15,7 +15,7 @@ const storage = new CloudinaryStorage({
 const upload = multer({
     storage,
     limits: {
-        fileSize: 500 * 1024, // Ukuran maksimum file dalam byte (500 KB)
+        fileSize: 5000 * 1024, // Ukuran maksimum file dalam byte (5000 KB)
     },
     fileFilter: (req, file, cb) => {
         if (!file.mimetype.startsWith("image/")) {

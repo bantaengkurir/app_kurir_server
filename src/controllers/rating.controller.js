@@ -1,4 +1,4 @@
-const { user: UserModel, product: ProductModel, courier_rating: CourierRatingModel, review: ReviewModel, order: OrderModel } = require("../models");
+const { user: UserModel, variant: VariantModel, product: ProductModel, courier_rating: CourierRatingModel, review: ReviewModel, order: OrderModel } = require("../models");
 
 /**
  * @param {import("express").Request} req
@@ -27,8 +27,8 @@ const indexProduct = async(req, res, _next) => {
                     as: "user",
                 },
                 {
-                    model: ProductModel,
-                    as: "product",
+                    model: VariantModel,
+                    as: "variant",
                 }
             ],
         });
@@ -98,7 +98,7 @@ const createRatProduct = async(req, res, _next) => {
     try {
 
         const currentUser = req.user;
-        const { order_id, product_id, rating, comment } = req.body;
+        const { order_id, variant_id, rating, comment } = req.body;
 
         if (!order_id) {
             return res.status(400).send({ message: "Permintaan tidak valid, pastikan semua data diisi" });
@@ -107,7 +107,7 @@ const createRatProduct = async(req, res, _next) => {
         const newRating = await ReviewModel.create({
             user_id: currentUser.id,
             order_id,
-            product_id,
+            variant_id,
             rating,
             comment
         });
@@ -158,14 +158,16 @@ const createRatCourier = async(req, res, _next) => {
 const updateRatProduct = async(req, res, _next) => {
     try {
         const currentUser = req.user.id;
-        const { order_id, product_id, rating, comment } = req.body;
+        const { order_id, variant_id, rating, comment } = req.body;
+
+        console.log("request body update ini ", req.body);
 
 
         // Memastikan produk milik seller yang sedang login
         const productRating = await ReviewModel.findOne({
             where: {
                 order_id,
-                product_id,
+                variant_id,
                 user_id: currentUser
             },
         });
@@ -182,7 +184,7 @@ const updateRatProduct = async(req, res, _next) => {
         // Update produk
         const updatedRatProduct = await productRating.update({
             order_id,
-            product_id,
+            variant_id,
             rating,
             comment
         });

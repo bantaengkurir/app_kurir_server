@@ -1,4 +1,4 @@
-const { user: UserModel, cart: CartModel, product: ProductModel } = require("../models");
+const { user: UserModel, cart: CartModel, product: ProductModel, variant: VariantModel } = require("../models");
 
 /**
  * @param {import("express").Request} req
@@ -11,13 +11,17 @@ const index = async(req, res, _next) => {
             where: {
                 user_id: req.user.id,
             },
-            attributes: ["id", "product_id", "quantity"],
+            attributes: ["id", "variant_id", "quantity"],
             include: [{
-                model: ProductModel,
-                as: 'product',
+                model: VariantModel,
+                as: 'variant',
                 include: [{
-                        model: UserModel,
-                        as: "seller",
+                        model: ProductModel,
+                        as: "product",
+                        include: [{
+                            model: UserModel,
+                            as: 'seller'
+                        }]
 
                     }]
                     // attributes: ["id", "name", "description", "price", "stock", "img_url"],
@@ -41,26 +45,34 @@ const index = async(req, res, _next) => {
  */
 const create = async(req, res, _next) => {
     try {
-        const { product_id, quantity } = req.body;
+        const { variant_id, quantity } = req.body;
+        const currentUser = req.user;
+
+        console.log("req.body", req.body);
+        console.log("currentUser", currentUser);
 
         // melakukan pengecekan terhadap inputan user
-        if (!product_id || !quantity) {
+        if (!variant_id || !quantity) {
             return res.status(400).send({ message: "Permintaan tidak valid" });
         }
 
-        const product = await ProductModel.findOne({
+        if (currentUser.role !== "customer") {
+            return res.status(403).send({ message: "Akses ditolak, hanya user yang dapat mengakses" });
+        }
+
+        const variant = await VariantModel.findOne({
             where: {
-                id: product_id,
+                id: variant_id,
             },
         });
 
-        // melakukan pengecekan produk dari product_id
-        if (!product) {
+        // melakukan pengecekan produk dari variant_id
+        if (!variant) {
             return res.status(404).send({ message: "Produk tidak ditemukan" });
         }
 
         // melakukan pengecekan pada stok produk
-        if (product.stock < quantity) {
+        if (variant.stock < quantity) {
             return res.status(400).send({ message: "Stock tidak mencukupi" });
         }
 
@@ -68,7 +80,7 @@ const create = async(req, res, _next) => {
         const existingCartItem = await CartModel.findOne({
             where: {
                 user_id: req.user.id,
-                product_id,
+                variant_id,
             },
         });
 
@@ -79,7 +91,7 @@ const create = async(req, res, _next) => {
             const newQuantity = existingCartItem.quantity + quantity;
 
             // cek stok produk sebelum update
-            if (product.stock < newQuantity) {
+            if (variant.stock < newQuantity) {
                 return res.status(400).send({ message: "Stock tidak mencukupi untuk quantity yang diminta" });
             }
 
@@ -90,7 +102,7 @@ const create = async(req, res, _next) => {
             // jika item belum ada di cart, tambahkan item baru ke cart
             cart = await CartModel.create({
                 user_id: req.user.id,
-                product_id,
+                variant_id,
                 quantity,
             });
         }
@@ -168,29 +180,29 @@ const update = async(req, res, _next) => {
             return res.status(404).send({ message: "Cart item not found" });
         }
 
-        const product = await ProductModel.findOne({
+        const variant = await VariantModel.findOne({
             where: {
-                id: cartItem.product_id,
+                id: cartItem.variant_id,
             },
         });
-        // console.log("product", product);
+        // console.log("variant", variant);
         // console.log("cartItem", cartItem);
 
-        if (!product) {
-            return res.status(404).send({ message: "Product not found" });
+        if (!variant) {
+            return res.status(404).send({ message: "variant not found" });
         }
 
         //cek stok produk sebelum update
         const stockDifference = quantity - cartItem.quantity;
-        if (product.stock < stockDifference) {
+        if (variant.stock < stockDifference) {
             return res.status(400).send({ message: "Stock tidak mencukupi untuk quantity yang diminta" });
         }
 
         await cartItem.update({ quantity });
 
         //update stok produk
-        // await product.update({
-        //     stock: product.stock - stockDifference,
+        // await variant.update({
+        //     stock: variant.stock - stockDifference,
         // });
 
         return res.send({

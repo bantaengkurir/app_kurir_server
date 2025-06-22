@@ -12,7 +12,7 @@ module.exports = {
             order_id: {
                 type: Sequelize.INTEGER
             },
-            product_id: {
+            variant_id: {
                 type: Sequelize.INTEGER
             },
             quantity: {

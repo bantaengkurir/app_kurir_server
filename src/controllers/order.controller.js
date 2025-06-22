@@ -3,6 +3,7 @@ const {
     user: UserModel,
     order: OrderModel,
     product: ProductModel,
+    variant: VariantModel,
     orderitem: OrderItemModel,
     shipping_cost: ShippingModel,
     payment: PaymentModel,
@@ -17,6 +18,7 @@ const { sequelize } = require('../models');
 
 const axios = require('axios');
 const order = require("../models/order");
+const { Op } = require('sequelize');
 const geolib = require('geolib');
 const { io } = require("../config/socket"); // Import WebSocket server
 
@@ -145,9 +147,14 @@ const index = async(req, res, next) => {
                     as: "couriers",
                     attributes: ["id", "name", "email", "profile_image", "phone_number", "latitude", "longitude"],
                     include: [{
-                        model: CourierModel,
-                        as: "courier"
-                    }]
+                            model: CourierModel,
+                            as: "courier"
+                        },
+                        {
+                            model: CourierRatingModel,
+                            as: "courier_rating"
+                        }
+                    ]
                 },
                 {
                     model: ShippingModel,
@@ -161,66 +168,143 @@ const index = async(req, res, next) => {
                     model: OrderItemModel,
                     as: "orderitem",
                     include: [{
-                        model: ProductModel,
-                        as: "product",
+                        model: VariantModel,
+                        as: "variant",
                         include: [{
-                            model: UserModel,
-                            as: "seller"
+                            model: ProductModel,
+                            as: "product",
+                            include: [{
+                                model: UserModel,
+                                as: "seller"
+                            }]
                         }]
                     }],
                 },
+                {
+                    model: HistoryModel,
+                    as: "order_historie",
+                }
             ],
         });
 
-        const formattedOrders = orders.map((order) => {
-            // Menghitung total quantity dari orderitem
-            const totalQuantity = order.orderitem.reduce((acc, item) => acc + item.quantity, 0);
-
-            return {
-                user_id: order.user_id,
-                order_id: order.id,
-                total: parseFloat(order.total_price),
-                quantity: totalQuantity,
-                order_code: order.order_code,
-                order_date: order.order_date,
-                status: order.status,
-                payment_method: order.payment_method,
-                payment_status: order.payment_status,
-                address: order.shipping_cost ? order.shipping_cost[0].address : null,
-                latitude: order.shipping_cost ? order.shipping_cost[0].latitude : null,
-                longitude: order.shipping_cost ? order.shipping_cost[0].longitude : null,
-                distance: order.shipping_cost ? order.shipping_cost[0].distance : null,
-                created_at: order.createdAt,
-                courier: {
-                    id: order.couriers.id,
-                    name: order.couriers.name,
-                    email: order.couriers.email,
-                    profile_image: order.couriers.profile_image,
-                    phone_number: order.couriers.phone_number,
-                    latitude: order.couriers.latitude,
-                    longitude: order.couriers.longitude,
-                    vehicle_type: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_type : null : null,
-                    vehicle_plate: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_plate : null : null,
-                },
-                items: order.orderitem.map((item) => ({
-                    product_id: item.product.id,
-                    seller_id: item.product.seller_id,
-                    name: item.product.name,
-                    description: item.product.description,
-                    image_url: item.product.image_url,
-                    price: parseFloat(item.product.price),
-                    stock: item.product.stock,
-                    quantity: item.quantity,
-                    seller_name: item.product.seller ? item.product.seller.name : null,
-                    seller_phone_number: item.product.seller ? item.product.seller.phone_number : null,
-                    seller_address: item.product.seller ? item.product.seller.address : null,
-                    seller_latitude: item.product.seller ? item.product.seller.latitude : null,
-                    seller_longitude: item.product.seller ? item.product.seller.longitude : null,
-                    seller_profile_image: item.product.seller ? item.product.seller.profile_image : null,
-                })),
-                shipping_cost: order.shipping_cost,
-            };
+        // Kumpulkan semua product_id unik
+        const allProductIds = [];
+        orders.forEach(order => {
+            order.orderitem.forEach(item => {
+                if (item.variant && item.variant.product) {
+                    allProductIds.push(item.variant.product.id);
+                }
+            });
         });
+
+        // Hitung rata-rata rating per produk (asumsi ada model Review)
+        const productRatings = {};
+        if (allProductIds.length > 0) {
+            const avgRatings = await ReviewModel.findAll({
+                attributes: [
+                    'variant_id', [sequelize.fn('AVG', sequelize.col('rating')), 'avg_rating']
+                ],
+                where: { variant_id: allProductIds },
+                group: ['variant_id']
+            });
+
+            avgRatings.forEach(rating => {
+                productRatings[rating.variant_id] = parseFloat(rating.get('avg_rating'));
+            });
+        }
+
+        // Kumpulkan courier_ids untuk rating kurir
+        const courierIds = orders
+            .filter(order => order.couriers)
+            .map(order => order.couriers.id);
+        const uniqueCourierIds = [...new Set(courierIds)];
+
+        const courierAvgRatings = {};
+        if (uniqueCourierIds.length > 0) {
+            const avgResults = await CourierRatingModel.findAll({
+                attributes: [
+                    'courier_id', [sequelize.fn('AVG', sequelize.col('rating')), 'avg_rating']
+                ],
+                where: { courier_id: uniqueCourierIds },
+                group: ['courier_id']
+            });
+
+            avgResults.forEach(result => {
+                courierAvgRatings[result.courier_id] = parseFloat(result.get('avg_rating'));
+            });
+        }
+
+
+
+        const formattedOrders = orders
+            .map((order) => {
+                // Menghitung total quantity dari orderitem
+                const totalQuantity = order.orderitem.reduce((acc, item) => acc + item.quantity, 0);
+
+                return {
+                    user_id: order.user_id,
+                    order_id: order.id,
+                    total: parseFloat(order.total_price),
+                    quantity: totalQuantity,
+                    order_code: order.order_code,
+                    order_date: order.order_date,
+                    status: order.status,
+                    payment_method: order.payment_method,
+                    payment_status: order.payment_status,
+                    address: order.shipping_cost && order.shipping_cost.length > 0 ? order.shipping_cost[0].address : null,
+                    latitude: order.shipping_cost && order.shipping_cost.length > 0 ? order.shipping_cost[0].latitude : null,
+                    longitude: order.shipping_cost && order.shipping_cost.length > 0 ? order.shipping_cost[0].longitude : null,
+                    distance: order.shipping_cost && order.shipping_cost.length > 0 ? order.shipping_cost[0].distance : null,
+                    created_at: order.createdAt,
+                    courier: {
+                        id: order.couriers.id,
+                        name: order.couriers.name,
+                        email: order.couriers.email,
+                        profile_image: order.couriers.profile_image,
+                        phone_number: order.couriers.phone_number,
+                        latitude: order.couriers.latitude,
+                        longitude: order.couriers.longitude,
+                        vehicle_type: order.couriers.courier && order.couriers.courier.length > 0 ?
+                            order.couriers.courier[0].vehicle_type : null,
+                        vehicle_plate: order.couriers.courier && order.couriers.courier.length > 0 ?
+                            order.couriers.courier[0].vehicle_plate : null,
+                        courier_average_rating: courierAvgRatings[order.couriers.id] || null
+                    },
+                    items: order.orderitem.map((item) => {
+
+                        const variantId = item.variant && item.variant.product ? item.variant.product.id : null;
+                        return {
+                            order_id: item.order_id,
+                            quantity: item.quantity,
+                            variant_id: item.variant_id,
+                            product_id: item.variant ? item.variant.product_id : null,
+                            name: item.variant ? item.variant.name : null,
+                            img_url: item.variant ? item.variant.img_url : null,
+                            price: item.variant ? item.variant.price : null,
+                            sku: item.variant ? item.variant.sku : null,
+                            stock: item.variant ? item.variant.stock : null,
+                            product_name: item.variant && item.variant.product ? item.variant.product.name : null,
+                            product_description: item.variant && item.variant.product ? item.variant.product.description : null,
+                            product_image_url: item.variant && item.variant.product ? item.variant.product.image_url : null,
+                            product_stock: item.variant && item.variant.product ? item.variant.product.stock : null,
+                            // product_rating: item.variant && item.variant.product ? item.variant.product.rating : null,
+                            product_average_rating: variantId ? (productRatings[variantId] || null) : null,
+                            product_total_sold: item.variant && item.variant.product ? item.variant.product.total_sold : null,
+                            product_category: item.variant && item.variant.product ? item.variant.product.category : null,
+                            seller_id: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.id : null,
+                            seller_name: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.name : null,
+                            seller_address: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.address : null,
+                            seller_latitude: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.latitude : null,
+                            seller_longitude: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.longitude : null,
+                            seller_profile_image: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.profile_image : null,
+                            seller_phone_number: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.phone_number : null
+                        }
+                    }),
+                    shipping_cost: order.shipping_cost || [],
+                    order_historie: order.order_historie || []
+                }
+            });
+
 
         return res.send({
             message: "Success",
@@ -230,7 +314,7 @@ const index = async(req, res, next) => {
         console.error("Error:", error);
         return res.status(500).send({ message: "Internal Server Error" });
     }
-};
+}
 
 
 const indexCourier = async(req, res, next) => {
@@ -244,9 +328,14 @@ const indexCourier = async(req, res, next) => {
                     required: true, // Hanya tampilkan order yang memiliki relasi dengan courier
                     attributes: ["id", "name", "email", "profile_image", "phone_number", "latitude", "longitude"],
                     include: [{
-                        model: CourierModel,
-                        as: "courier"
-                    }]
+                            model: CourierModel,
+                            as: "courier"
+                        },
+                        {
+                            model: CourierRatingModel,
+                            as: "courier_rating"
+                        }
+                    ]
                 },
                 {
                     model: UserModel,
@@ -264,25 +353,75 @@ const indexCourier = async(req, res, next) => {
                     model: OrderItemModel,
                     as: "orderitem",
                     include: [{
-                        model: ProductModel,
-                        as: "product",
+                        model: VariantModel,
+                        as: "variant",
                         include: [{
-                            model: UserModel,
-                            as: "seller"
+                            model: ProductModel,
+                            as: "product",
+                            include: [{
+                                model: UserModel,
+                                as: "seller"
+                            }]
                         }]
                     }],
                 },
             ],
         });
 
-        // console.log("ini user", req.user)
+        // Kumpulkan semua product_id unik
+        const allProductIds = [];
+        orders.forEach(order => {
+            order.orderitem.forEach(item => {
+                if (item.variant && item.variant.product) {
+                    allProductIds.push(item.variant.product.id);
+                }
+            });
+        });
+
+        // Hitung rata-rata rating per produk (asumsi ada model Review)
+        const productRatings = {};
+        if (allProductIds.length > 0) {
+            const avgRatings = await ReviewModel.findAll({
+                attributes: [
+                    'variant_id', [sequelize.fn('AVG', sequelize.col('rating')), 'avg_rating']
+                ],
+                where: { variant_id: allProductIds },
+                group: ['variant_id']
+            });
+
+            avgRatings.forEach(rating => {
+                productRatings[rating.variant_id] = parseFloat(rating.get('avg_rating'));
+            });
+        }
+
+        // Kumpulkan courier_ids untuk rating kurir
+        const courierIds = orders
+            .filter(order => order.couriers)
+            .map(order => order.couriers.id);
+        const uniqueCourierIds = [...new Set(courierIds)];
+
+        const courierAvgRatings = {};
+        if (uniqueCourierIds.length > 0) {
+            const avgResults = await CourierRatingModel.findAll({
+                attributes: [
+                    'courier_id', [sequelize.fn('AVG', sequelize.col('rating')), 'avg_rating']
+                ],
+                where: { courier_id: uniqueCourierIds },
+                group: ['courier_id']
+            });
+
+            avgResults.forEach(result => {
+                courierAvgRatings[result.courier_id] = parseFloat(result.get('avg_rating'));
+            });
+        }
+
 
         const formattedOrders = orders.map((order) => {
             const totalQuantity = order.orderitem.reduce((acc, item) => acc + item.quantity, 0);
 
             return {
-                order_id: order.id,
                 user_id: order.user_id,
+                order_id: order.id,
                 total: parseFloat(order.total_price),
                 quantity: totalQuantity,
                 order_code: order.order_code,
@@ -290,51 +429,55 @@ const indexCourier = async(req, res, next) => {
                 status: order.status,
                 payment_method: order.payment_method,
                 payment_status: order.payment_status,
-                address: order.shipping_cost.address,
-                latitude: order.shipping_cost.latitude,
-                longitude: order.shipping_cost.longitude,
-                distance: order.shipping_cost.distance,
-                created_at: order.created_at,
-                user: {
-                    id: order.user.id,
-                    name: order.user.name,
-                    email: order.user.email,
-                    profile_image: order.user.profile_image,
-                    phone_number: order.user.phone_number,
-                    address: order.user.address,
-                    latitude: order.user.latitude,
-                    longitude: order.user.longitude,
-                    gender: order.user.gender,
-                    date_of_birth: order.user.date_of_birth,
-
-                },
+                address: order.shipping_cost && order.shipping_cost.length > 0 ? order.shipping_cost[0].address : null,
+                latitude: order.shipping_cost && order.shipping_cost.length > 0 ? order.shipping_cost[0].latitude : null,
+                longitude: order.shipping_cost && order.shipping_cost.length > 0 ? order.shipping_cost[0].longitude : null,
+                distance: order.shipping_cost && order.shipping_cost.length > 0 ? order.shipping_cost[0].distance : null,
+                created_at: order.createdAt,
                 courier: {
                     id: order.couriers.id,
                     name: order.couriers.name,
-                    img_url: order.couriers.img_url,
-                    phone_number: order.couriers.phone_number,
+                    email: order.couriers.email,
                     profile_image: order.couriers.profile_image,
-                    vehicle_type: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_type : null : null,
-                    vehicle_plate: order.couriers.courier ? order.couriers.courier.length > 0 ? order.couriers.courier[0].vehicle_plate : null : null,
+                    phone_number: order.couriers.phone_number,
+                    latitude: order.couriers.latitude,
+                    longitude: order.couriers.longitude,
+                    vehicle_type: order.couriers.courier && order.couriers.courier.length > 0 ?
+                        order.couriers.courier[0].vehicle_type : null,
+                    vehicle_plate: order.couriers.courier && order.couriers.courier.length > 0 ?
+                        order.couriers.courier[0].vehicle_plate : null,
+                    courier_average_rating: courierAvgRatings[order.couriers.id] || null
                 },
-                items: order.orderitem.map((item) => ({
-                    product_id: item.product.id,
-                    name: item.product.name,
-                    description: item.product.description,
-                    image_url: item.product.image_url,
-                    rating: item.product.rating,
-                    category: item.product.category,
-                    price: parseFloat(item.product.price),
-                    quantity: item.quantity,
-                    seller_name: item.product.seller ? item.product.seller.name : null, // Perbaikan di sini
-                    seller_phone_number: item.product.seller ? item.product.seller.phone_number : null, // Perbaikan di sini
-                    seller_address: item.product.seller ? item.product.seller.address : null,
-                    seller_latitude: item.product.seller ? item.product.seller.latitude : null,
-                    seller_longitude: item.product.seller ? item.product.seller.longitude : null,
-                    seller_profile_image: item.product.seller ? item.product.seller.profile_image : null,
-                })),
-                shipping_cost: order.shipping_cost,
-            };
+                items: order.orderitem.map((item) => {
+                    const variantId = item.variant && item.variant.product ? item.variant.product.id : null;
+                    return {
+                        order_id: item.order_id,
+                        quantity: item.quantity,
+                        variant_id: item.variant_id,
+                        product_id: item.variant ? item.variant.product_id : null,
+                        name: item.variant ? item.variant.name : null,
+                        img_url: item.variant ? item.variant.img_url : null,
+                        price: item.variant ? item.variant.price : null,
+                        sku: item.variant ? item.variant.sku : null,
+                        stock: item.variant ? item.variant.stock : null,
+                        product_name: item.variant && item.variant.product ? item.variant.product.name : null,
+                        product_description: item.variant && item.variant.product ? item.variant.product.description : null,
+                        product_image_url: item.variant && item.variant.product ? item.variant.product.image_url : null,
+                        product_stock: item.variant && item.variant.product ? item.variant.product.stock : null,
+                        product_average_rating: variantId ? (productRatings[variantId] || null) : null,
+                        product_total_sold: item.variant && item.variant.product ? item.variant.product.total_sold : null,
+                        product_category: item.variant && item.variant.product ? item.variant.product.category : null,
+                        seller_id: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.id : null,
+                        seller_name: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.name : null,
+                        seller_address: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.address : null,
+                        seller_latitude: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.latitude : null,
+                        seller_longitude: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.longitude : null,
+                        seller_profile_image: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.profile_image : null,
+                        seller_phone_number: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.phone_number : null
+                    }
+                }),
+                shipping_cost: order.shipping_cost || []
+            }
         });
 
         return res.send({
@@ -370,7 +513,7 @@ const reverseGeocode = async(latitude, longitude) => {
 };
 
 
-
+//! Tanpa perhitungan jarak dari seller kekurir dan dari kurir ke user
 const create = async(req, res, next) => {
     const { items, payment_method, shipping_cost } = req.body;
     const { latitude, longitude } = shipping_cost || {};
@@ -378,7 +521,7 @@ const create = async(req, res, next) => {
 
     console.log("body create product", req.body);
 
-    const idOrder = items.map((item) => item.product_id);
+    const idOrder = items.map((item) => item.variant_id);
 
     // console.log("body", req.body)
 
@@ -391,31 +534,35 @@ const create = async(req, res, next) => {
     }
 
     // Ambil produk beserta seller
-    const products = await ProductModel.findAll({
+    const variants = await VariantModel.findAll({
         where: {
             id: idOrder,
         },
         include: [{
-            model: UserModel,
-            as: 'seller',
-            attributes: ['id', 'latitude', 'longitude']
+            model: ProductModel,
+            as: 'product',
+            include: [{
+                model: UserModel,
+                as: 'seller',
+                attributes: ['id', 'latitude', 'longitude']
+            }]
         }]
     });
 
-    if (products.length !== idOrder.length) {
+    if (variants.length !== idOrder.length) {
         return res.status(400).send({ message: "Satu atau lebih produk tidak ditemukan" });
     }
 
     // Kelompokkan produk berdasarkan seller
-    const sellers = products.reduce((acc, product) => {
-        const sellerId = product.seller.id;
+    const sellers = variants.reduce((acc, variant) => {
+        const sellerId = variant.product.seller.id;
         if (!acc[sellerId]) {
             acc[sellerId] = {
-                seller: product.seller,
-                products: []
+                seller: variant.product.seller,
+                variants: []
             };
         }
-        acc[sellerId].products.push(product);
+        acc[sellerId].variants.push(variant);
         return acc;
     }, {});
 
@@ -431,10 +578,10 @@ const create = async(req, res, next) => {
 
     // Generate order code
     let code;
-    for (let i = 0; i < products.length; i++) {
-        if (products[i].status === "makanan") {
+    for (let i = 0; i < variants.length; i++) {
+        if (variants[i].status === "makanan") {
             code = "01" + Math.floor(Math.random() * 1000000);
-        } else if (products[i].status === "minuman") {
+        } else if (variants[i].status === "minuman") {
             code = "02" + Math.floor(Math.random() * 1000000);
         } else {
             code = "03" + Math.floor(Math.random() * 1000000);
@@ -453,20 +600,40 @@ const create = async(req, res, next) => {
     if (couriers.length === 0) {
         return res.status(400).send({ message: "Tidak ada courier yang tersedia" });
     }
+    // const courierReady = await UserModel.findAll({
+    //     where: {
+    //         role: "courier",
+    //     },
+    //     include: [{
+    //         model: CourierModel,
+    //         as: "courier", // Pastikan sesuai dengan relasi yang didefinisikan
+    //         where: {
+    //             availability: "ready", // ✅ Filter berdasarkan availability di tabel Courier
+    //         },
+    //         required: true, // INNER JOIN (hambil User yang punya relasi Courier)
+    //     }],
+    //     attributes: ['id', 'latitude', 'longitude'],
+    // });
     const courierReady = await UserModel.findAll({
         where: {
             role: "courier",
+            status: "online", // ✅ Hanya kurir yang online
         },
         include: [{
             model: CourierModel,
-            as: "courier", // Pastikan sesuai dengan relasi yang didefinisikan
+            as: "courier",
             where: {
-                availability: "ready", // ✅ Filter berdasarkan availability di tabel Courier
+                availability: "ready", // ✅ Hanya yang availability = ready
+                order_status: "free", // ✅ Hanya yang tidak sedang mengantar (free)
             },
-            required: true, // INNER JOIN (hambil User yang punya relasi Courier)
+            required: true, // ✅ Pastikan INNER JOIN (hanya user yang punya data courier)
         }],
-        attributes: ['id', 'latitude', 'longitude'],
+        attributes: ['id', 'latitude', 'longitude'], // Ambil data yang diperlukan
     });
+
+    if (courierReady.length === 0) {
+        return res.status(400).send({ message: "Tidak ada kurir yang siap mengantar" });
+    }
 
     if (courierReady.length === 0) {
         return res.status(400).send({ message: "Tidak ada courier yang ready" });
@@ -519,10 +686,34 @@ const create = async(req, res, next) => {
     shipping = Math.round(shipping);
 
     // Pilih kurir terdekat ke user
+    // let closestCourier = null;
+    // let minDistance = Infinity;
+    // for (const courier of couriers) {
+    //     const courierDistance = geolib.getDistance({ latitude, longitude }, { latitude: courier.latitude, longitude: courier.longitude });
+    //     if (courierDistance < minDistance) {
+    //         minDistance = courierDistance;
+    //         closestCourier = courier;
+    //     }
+    // }
+
+    // if (!closestCourier) {
+    //     return res.status(400).send({ message: "Tidak ada courier dalam jangkauan" });
+    // }
+
+    // Pilih kurir terdekat ke user
     let closestCourier = null;
     let minDistance = Infinity;
-    for (const courier of couriers) {
+    for (const courier of courierReady) { // Gunakan courierReady yang sudah difilter
         const courierDistance = geolib.getDistance({ latitude, longitude }, { latitude: courier.latitude, longitude: courier.longitude });
+
+        // Konversi jarak dari meter ke kilometer
+        const distanceInKm = courierDistance / 1000;
+
+        console.log("Jarak ke kurir:", distanceInKm, "km");
+
+        // Jika jarak lebih dari 10 km, skip kurir ini
+        if (distanceInKm >= 10) continue;
+
         if (courierDistance < minDistance) {
             minDistance = courierDistance;
             closestCourier = courier;
@@ -530,7 +721,7 @@ const create = async(req, res, next) => {
     }
 
     if (!closestCourier) {
-        return res.status(400).send({ message: "Tidak ada courier dalam jangkauan" });
+        return res.status(400).send({ message: "Tidak ada courier dalam jangkauan (semua kurir lebih dari 10 km)" });
     }
 
     // Buat order
@@ -545,16 +736,16 @@ const create = async(req, res, next) => {
     // Hitung total harga
     let totalPrice = 0;
     const orderItems = items.map((item) => {
-        const product = products.find((b) => b.id === item.product_id);
-        const subtotal = product.price * item.quantity;
+        const variant = variants.find((b) => b.id === item.variant_id);
+        const subtotal = variant.price * item.quantity;
         totalPrice += subtotal;
 
         return {
             order_id: newOrder.id,
             courier_id: newOrder.courier_id,
-            product_id: item.product_id,
+            variant_id: item.variant_id,
             quantity: item.quantity,
-            price: product.price,
+            price: variant.price,
             subtotal: subtotal,
         };
     });
@@ -594,10 +785,11 @@ const create = async(req, res, next) => {
         message: "Success",
         data: {
             order_id: newOrder.id,
+            user_id: currentUser.id,
             courier_id: newOrder.courier_id,
             total_price: totalPrice,
             items: orderItems.map((od) => ({
-                product_id: od.product_id,
+                variant_id: od.variant_id,
                 quantity: od.quantity,
                 price: parseFloat(od.price),
                 subtotal: parseFloat(od.subtotal),
@@ -606,6 +798,301 @@ const create = async(req, res, next) => {
         },
     });
 };
+
+//! Dengan perhitungan jarak dari seller ke kurir dan dari kurir ke user
+
+// const create = async(req, res, next) => {
+//     try {
+//         const { items, payment_method, shipping_cost } = req.body;
+//         const { latitude, longitude } = shipping_cost || {};
+//         const currentUser = req.user;
+
+//         // Validasi input
+//         if (!items || items.length === 0) {
+//             return res.status(400).send({ message: "Produk Tidak Boleh Kosong !!" });
+//         }
+//         if (!latitude || !longitude) {
+//             return res.status(400).send({ message: "Harap Pilih Lokasi Terlebih Dahulu" });
+//         }
+//         if (!currentUser || !currentUser.id) {
+//             return res.status(401).send({ message: "User Tidak Memiliki Izin" });
+//         }
+
+//         // Ekstrak variant IDs dari items
+//         const variantIds = items.map(item => item.variant_id);
+
+//         // Ambil data variants dengan informasi seller
+//         const variants = await VariantModel.findAll({
+//             where: { id: variantIds },
+//             include: [{
+//                 model: ProductModel,
+//                 as: 'product',
+//                 include: [{
+//                     model: UserModel,
+//                     as: 'seller',
+//                     attributes: ['id', 'latitude', 'longitude']
+//                 }]
+//             }]
+//         });
+
+//         if (variants.length !== variantIds.length) {
+//             return res.status(400).send({ message: "Variant Tidak Ditemukan" });
+//         }
+
+//         // Kelompokkan variants berdasarkan seller
+//         const sellers = variants.reduce((acc, variant) => {
+//             const sellerId = variant.product.seller.id;
+//             if (!acc[sellerId]) {
+//                 acc[sellerId] = {
+//                     seller: variant.product.seller,
+//                     variants: []
+//                 };
+//             }
+//             acc[sellerId].variants.push(variant);
+//             return acc;
+//         }, {});
+
+//         const sellerGroups = Object.values(sellers);
+
+//         // Validasi lokasi seller
+//         for (const group of sellerGroups) {
+//             const seller = group.seller;
+//             if (!seller.latitude || !seller.longitude) {
+//                 return res.status(400).send({
+//                     message: `Seller ${seller.id} Memiliki Lokasi Yang tidak Valid`
+//                 });
+//             }
+//         }
+
+//         // Generate order code
+//         const orderCode = "01" + Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+
+//         // Ambil kurir yang tersedia (online + ready + free)
+//         const courierReady = await UserModel.findAll({
+//             where: {
+//                 role: "courier",
+//                 status: "online",
+//             },
+//             include: [{
+//                 model: CourierModel,
+//                 as: "courier",
+//                 where: {
+//                     availability: "ready",
+//                     order_status: "free",
+//                 },
+//                 required: true,
+//             }],
+//             attributes: ['id', 'latitude', 'longitude'],
+//         });
+
+//         if (courierReady.length === 0) {
+//             return res.status(400).send({ message: "Tidak Ada Kurir Yang Tersedia !!" });
+//         }
+
+//         // Fungsi menghitung jarak (Haversine formula)
+//         const calculateDistance = (loc1, loc2) => {
+//             const R = 6371e3; // Earth radius in meters
+//             const φ1 = loc1.latitude * Math.PI / 180;
+//             const φ2 = loc2.latitude * Math.PI / 180;
+//             const Δφ = (loc2.latitude - loc1.latitude) * Math.PI / 180;
+//             const Δλ = (loc2.longitude - loc1.longitude) * Math.PI / 180;
+
+//             const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+//                 Math.cos(φ1) * Math.cos(φ2) *
+//                 Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+//             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+//             return R * c; // Distance in meters
+//         };
+
+//         // Lokasi customer
+//         const customerLocation = { latitude, longitude };
+
+//         // Lokasi seller (unik)
+//         const sellerLocations = sellerGroups.map(group => ({
+//             latitude: group.seller.latitude,
+//             longitude: group.seller.longitude,
+//             sellerId: group.seller.id,
+//         }));
+
+//         // Temukan kurir yang memenuhi kriteria (≤10 km dari customer DAN ≤3 km dari SEMUA seller)
+//         let eligibleCouriers = [];
+//         for (const courier of courierReady) {
+//             const courierLocation = {
+//                 latitude: courier.latitude,
+//                 longitude: courier.longitude,
+//             };
+
+//             // 1. Cek jarak ke customer (harus ≤10 km)
+//             const distanceToCustomer = calculateDistance(courierLocation, customerLocation);
+//             if (distanceToCustomer > 10000) continue;
+
+//             // 2. Cek jarak ke SEMUA seller (harus ≤3 km masing-masing)
+//             let isAllSellersInRange = true;
+//             for (const seller of sellerLocations) {
+//                 const distanceToSeller = calculateDistance(courierLocation, seller);
+//                 if (distanceToSeller > 3000) {
+//                     isAllSellersInRange = false;
+//                     break;
+//                 }
+//             }
+
+//             if (isAllSellersInRange) {
+//                 eligibleCouriers.push({
+//                     courier,
+//                     distanceToCustomer,
+//                 });
+//             }
+//         }
+
+//         // Fallback: Jika tidak ada kurir yang memenuhi semua kriteria
+//         let selectedCourier = null;
+//         if (eligibleCouriers.length === 0) {
+//             let bestCourier = null;
+//             let maxSellersCovered = 0;
+//             let minDistanceToCustomer = Infinity;
+
+//             for (const courier of courierReady) {
+//                 const courierLocation = {
+//                     latitude: courier.latitude,
+//                     longitude: courier.longitude,
+//                 };
+
+//                 const distanceToCustomer = calculateDistance(courierLocation, customerLocation);
+//                 if (distanceToCustomer > 10000) continue;
+
+//                 let sellersCovered = 0;
+//                 for (const seller of sellerLocations) {
+//                     const distanceToSeller = calculateDistance(courierLocation, seller);
+//                     if (distanceToSeller <= 3000) sellersCovered++;
+//                 }
+
+//                 if (
+//                     sellersCovered > maxSellersCovered ||
+//                     (sellersCovered === maxSellersCovered && distanceToCustomer < minDistanceToCustomer)
+//                 ) {
+//                     maxSellersCovered = sellersCovered;
+//                     minDistanceToCustomer = distanceToCustomer;
+//                     bestCourier = courier;
+//                 }
+//             }
+
+//             if (!bestCourier) {
+//                 return res.status(400).send({ message: "Tidak Ada Kurir Dalam Jangkauan !!" });
+//             }
+
+//             selectedCourier = bestCourier;
+//         } else {
+//             // Pilih kurir terdekat dari yang eligible
+//             eligibleCouriers.sort((a, b) => a.distanceToCustomer - b.distanceToCustomer);
+//             selectedCourier = eligibleCouriers[0].courier;
+//         }
+
+//         // Hitung jarak untuk biaya pengiriman
+//         // 1. Hitung jarak terjauh dari seller ke customer
+//         let maxSellerToCustomer = 0;
+//         for (const sellerLoc of sellerLocations) {
+//             const dist = calculateDistance(sellerLoc, customerLocation);
+//             if (dist > maxSellerToCustomer) {
+//                 maxSellerToCustomer = dist;
+//             }
+//         }
+
+//         // 2. Hitung jarak dari kurir ke seller terdekat
+//         let minCourierToSeller = Infinity;
+//         for (const sellerLoc of sellerLocations) {
+//             const dist = calculateDistance({ latitude: selectedCourier.latitude, longitude: selectedCourier.longitude },
+//                 sellerLoc
+//             );
+//             if (dist < minCourierToSeller) minCourierToSeller = dist;
+//         }
+
+//         // 3. Estimasi total jarak (kurir -> seller terdekat -> customer)
+//         const estimatedTotalDistance = minCourierToSeller + maxSellerToCustomer;
+
+//         // 4. Hitung biaya pengiriman
+//         let shippingCost = 5000; // Biaya dasar
+//         if (estimatedTotalDistance > 1000) {
+//             const additionalKm = Math.ceil((estimatedTotalDistance - 1000) / 1000);
+//             shippingCost += additionalKm * 1500;
+//         }
+
+//         // Buat order
+//         const newOrder = await OrderModel.create({
+//             user_id: currentUser.id,
+//             courier_id: selectedCourier.id,
+//             order_date: new Date(),
+//             payment_method,
+//             order_code: orderCode,
+//             status: "Pending",
+//         });
+
+//         // Hitung total harga dan buat order items
+//         let totalPrice = 0;
+//         const orderItems = items.map(item => {
+//             const variant = variants.find(v => v.id === item.variant_id);
+//             const subtotal = variant.price * item.quantity;
+//             totalPrice += subtotal;
+
+//             return {
+//                 order_id: newOrder.id,
+//                 variant_id: item.variant_id,
+//                 quantity: item.quantity,
+//                 price: variant.price,
+//                 subtotal,
+//             };
+//         });
+
+//         await OrderItemModel.bulkCreate(orderItems);
+
+//         // Update order dengan total harga
+//         await OrderModel.update({ total_price: totalPrice }, { where: { id: newOrder.id } });
+
+//         // Buat record pengiriman
+//         const newShipping = await ShippingModel.create({
+//             order_id: newOrder.id,
+//             address: "Customer Address", // Ganti dengan alamat sebenarnya
+//             latitude,
+//             longitude,
+//             distance: estimatedTotalDistance,
+//             shipping_cost: shippingCost,
+//         });
+
+//         // Update status kurir menjadi "unready"
+//         await CourierModel.update({ availability: "unready" }, { where: { courier_id: selectedCourier.id } });
+
+//         // Notifikasi via WebSocket
+//         io.emit("orderCreated", {
+//             orderId: newOrder.id,
+//             customerId: currentUser.id,
+//             courierId: selectedCourier.id,
+//         });
+
+//         return res.send({
+//             message: "Order created successfully",
+//             data: {
+//                 order_id: newOrder.id,
+//                 courier_id: selectedCourier.id,
+//                 total_price: totalPrice,
+//                 shipping_cost: shippingCost,
+//                 estimated_distance: estimatedTotalDistance,
+//                 items: orderItems.map(item => ({
+//                     variant_id: item.variant_id,
+//                     quantity: item.quantity,
+//                     price: item.price,
+//                     subtotal: item.subtotal,
+//                 })),
+//             },
+//         });
+
+//     } catch (error) {
+//         console.error("Error creating order:", error);
+//         return res.status(500).send({ message: "Terjadi kesalahan saat membuat order" });
+//     }
+// };
+
+
+
 
 /**
  * @param {import("express").Request} req
@@ -647,13 +1134,17 @@ const getOrderById = async(req, res, next) => {
                     model: OrderItemModel,
                     as: "orderitem",
                     include: [{
-                        model: ProductModel,
-                        as: "product",
+                        model: VariantModel,
+                        as: "variant",
                         include: [{
-                            model: UserModel,
-                            as: "seller"
+                            model: ProductModel,
+                            as: "product",
+                            include: [{
+                                model: UserModel,
+                                as: "seller"
+                            }]
                         }]
-                    }, ],
+                    }],
                 },
             ],
         });
@@ -709,21 +1200,29 @@ const getOrderById = async(req, res, next) => {
             })),
             items: order.orderitem
                 .map((item) => ({
-                    product_id: item.product.id,
-                    name: item.product.name,
-                    description: item.product.description,
-                    image_url: item.product.image_url,
-                    price: parseFloat(item.product.price),
-                    stock: item.product.stock,
+                    order_id: item.order_id,
                     quantity: item.quantity,
-                    seller_id: item.product.seller.id,
-                    seller_name: item.product.seller.name,
-                    seller_profile_image: item.product.seller.profile_image,
-                    seller_phone_number: item.product.seller.phone_number,
-                    seller_email: item.product.seller.email,
-                    seller_address: item.product.seller.address,
-                    seller_latitude: item.product.seller.latitude,
-                    seller_longitude: item.product.seller.longitude,
+                    variant_id: item.variant_id,
+                    product_id: item.variant ? item.variant.product_id : null,
+                    name: item.variant ? item.variant.name : null,
+                    img_url: item.variant ? item.variant.img_url : null,
+                    price: item.variant ? item.variant.price : null,
+                    sku: item.variant ? item.variant.sku : null,
+                    stock: item.variant ? item.variant.stock : null,
+                    product_name: item.variant && item.variant.product ? item.variant.product.name : null,
+                    product_description: item.variant && item.variant.product ? item.variant.product.description : null,
+                    product_image_url: item.variant && item.variant.product ? item.variant.product.image_url : null,
+                    product_stock: item.variant && item.variant.product ? item.variant.product.stock : null,
+                    product_rating: item.variant && item.variant.product ? item.variant.product.rating : null,
+                    product_total_sold: item.variant && item.variant.product ? item.variant.product.total_sold : null,
+                    product_category: item.variant && item.variant.product ? item.variant.product.category : null,
+                    seller_id: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.id : null,
+                    seller_name: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.name : null,
+                    seller_address: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.address : null,
+                    seller_latitude: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.latitude : null,
+                    seller_longitude: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.longitude : null,
+                    seller_profile_image: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.profile_image : null,
+                    seller_phone_number: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.phone_number : null
                 })),
             shipping_cost: order.shipping_cost,
         };
@@ -763,14 +1262,14 @@ const cancelOrder = async(req, res, next) => {
         const orderItem = order.orderitem;
 
         for (const item of orderItem) {
-            const product = await ProductModel.findByPk(item.product_id);
+            const variant = await VariantModel.findByPk(item.variant_id);
 
-            if (!product) {
-                return res.status(404).send({ message: `Produk dengan ID ${item.product_id} tidak ditemukan` });
+            if (!variant) {
+                return res.status(404).send({ message: `Produk dengan ID ${item.variant_id} tidak ditemukan` });
             }
 
-            product.stock += item.quantity;
-            await product.save();
+            variant.stock += item.quantity;
+            await variant.save();
         }
 
         await OrderModel.update({ status: "cancelled", payment_status: "cancelled" }, { where: { id: orderId } });
@@ -946,13 +1445,17 @@ const updateStatus = async(req, res, next) => {
                     model: OrderItemModel,
                     as: "orderitem",
                     include: [{
-                        model: ProductModel,
-                        as: "product",
+                        model: VariantModel,
+                        as: "variant",
                         include: [{
-                            model: UserModel,
-                            as: "seller"
+                            model: ProductModel,
+                            as: "product",
+                            include: [{
+                                model: UserModel,
+                                as: "seller"
+                            }]
                         }]
-                    }, ],
+                    }],
                 },
             ],
             transaction
@@ -1026,11 +1529,13 @@ const updateStatus = async(req, res, next) => {
                 transaction,
             });
 
+            console.log("orderItems", orderItems)
+
             // Simpan rating untuk setiap product_id ke tabel product_ratings
             const ratingsData = orderItems.map((item) => ({
                 order_id: orderId,
                 user_id: currentUser.id,
-                product_id: item.product_id,
+                variant_id: item.variant_id,
                 rating: null, // Nilai default (opsional)
                 comment: null, // Komentar default (opsional)
                 rating_time: new Date(),
@@ -1145,8 +1650,8 @@ const updateStatus = async(req, res, next) => {
                 const sellerEarnings = {};
 
                 orderItems.forEach((item) => {
-                    const sellerId = item.product.seller.id;
-                    const itemTotal = item.quantity * item.product.price;
+                    const sellerId = item.variant.product.seller.id;
+                    const itemTotal = item.quantity * item.variant.price;
 
                     if (!sellerEarnings[sellerId]) {
                         sellerEarnings[sellerId] = 0;

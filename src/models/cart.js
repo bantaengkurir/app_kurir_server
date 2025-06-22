@@ -15,15 +15,15 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: "user_id",
                 as: "user"
             })
-            cart.belongsTo(models.product, {
-                foreignKey: "product_id",
-                as: "product"
+            cart.belongsTo(models.variant, {
+                foreignKey: "variant_id",
+                as: "variant"
             })
         }
     }
     cart.init({
         user_id: DataTypes.INTEGER,
-        product_id: DataTypes.INTEGER,
+        variant_id: DataTypes.INTEGER,
         quantity: DataTypes.INTEGER
     }, {
         sequelize,

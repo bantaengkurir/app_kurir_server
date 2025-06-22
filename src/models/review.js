@@ -15,9 +15,9 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: "user_id",
                 as: "user"
             })
-            review.belongsTo(models.product, {
-                foreignKey: "product_id",
-                as: "product"
+            review.belongsTo(models.variant, {
+                foreignKey: "variant_id",
+                as: "variant"
             })
             review.belongsTo(models.order, {
                 foreignKey: "order_id",
@@ -27,7 +27,7 @@ module.exports = (sequelize, DataTypes) => {
     }
     review.init({
         order_id: DataTypes.INTEGER,
-        product_id: DataTypes.INTEGER,
+        variant_id: DataTypes.INTEGER,
         user_id: DataTypes.INTEGER,
         rating: DataTypes.INTEGER,
         comment: DataTypes.TEXT,

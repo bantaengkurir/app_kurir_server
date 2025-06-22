@@ -10,15 +10,15 @@ const { user: UserModel } = require("../models");
 const validateRegister = async(req, res, next) => {
     const { name, email, password, role, latitude, longitude, profile_image, phone_number, gender } = req.body;
 
-    if (!name || !email || !password || !role || !latitude || !longitude || !profile_image || !phone_number || !gender
-        // || !date_of_birth
+    // if (!name || !email || !password || !role || !latitude || !longitude || !profile_image || !phone_number || !gender
+    //     // || !date_of_birth
 
-    ) {
-        return res.send({
-            message: "Bad request",
-            data: null,
-        });
-    }
+    // ) {
+    //     return res.send({
+    //         message: "Bad request",
+    //         data: null,
+    //     });
+    // }
 
     if (!isEmail(email)) {
         return res.send({

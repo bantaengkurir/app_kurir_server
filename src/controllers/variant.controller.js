@@ -101,7 +101,17 @@ const create = async(req, res, _next) => {
             stock,
         });
 
-        console.log("New Variant:", newVariant);
+        const product = await ProductModel.findOne({
+    where: {
+        id: product_id,
+    },
+});
+
+const insertStock = parseInt(product.stock) + parseInt(newVariant.stock);
+
+await ProductModel.update({ stock: insertStock }, { where: { id: product_id } });
+
+        // console.log("New Variant:", newVariant);
 
         return res.send({
             message: "Variant created successfully",
@@ -222,6 +232,16 @@ const remove = async(req, res, _next) => {
                 id: variantId,
             },
         });
+
+         const product = await ProductModel.findOne({
+    where: {
+        id: product_id,
+    },
+});
+
+const insertStock = parseInt(product.stock) - parseInt(variant.stock);
+
+await ProductModel.update({ stock: insertStock }, { where: { id: variant.product_id } });
 
         return res.send({ message: "Variant berhasil dihapus" });
     } catch (error) {

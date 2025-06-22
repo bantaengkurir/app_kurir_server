@@ -4,7 +4,9 @@ const {
     shipping_cost: ShippingModel,
     orderitem: OrderItemModel,
     product: ProductModel,
+    variant: VariantModel,
     order_historie: OrderHistoryModel,
+    user: UserModel,
     sequelize,
 } = require("../models");
 const crypto = require('crypto');
@@ -569,6 +571,7 @@ const createPayment = async(req, res) => {
         const currentUser = req.user;
         const { payment_method } = req.body;
 
+
         // Input validation
         if (!order_id) {
             return res.status(400).json({ message: "Order ID wajib diisi" });
@@ -622,6 +625,7 @@ const createPayment = async(req, res) => {
         // Update order status
         await OrderModel.update({
             status: initial_order_status,
+            payment_method,
             payment_status: initial_payment_status
         }, { where: { id: order_id } });
 
@@ -669,46 +673,120 @@ const createPayment = async(req, res) => {
             });
         } else {
             // Process COD - reduce stock immediately
+            // const orderItems = await OrderItemModel.findAll({
+            //     where: { order_id }
+            // });
+
+            // for (const item of orderItems) {
+            //     const variant = await VariantModel.findByPk(item.variant_id);
+            //     if (variant) {
+            //         if (variant.stock < item.quantity) {
+            //             return res.status(400).json({
+            //                 message: `Stok ${variant.name} tidak mencukupi`
+            //             });
+            //         }
+            //         await variant.update({
+            //             stock: variant.stock - item.quantity,
+            //             total_sold: variant.total_sold + item.quantity
+            //         });
+            //     }
+            // }
+
+            // // Create success history for COD
+            // await OrderHistoryModel.create({
+            //     order_id,
+            //     user_id: currentUser.id,
+            //     status: "process",
+            //     note: 'Pembayaran COD Berhasil'
+            // });
+
+            // Trigger Pusher for COD order
+            // pusher.trigger('orders', 'new-order', {
+            //     order_id,
+            //     user_id: currentUser.id,
+            //     payment_method: 'COD',
+            //     amount,
+            //     status: 'process',
+            //     items: orderItems.map(item => ({
+            //         variant_id: item.variant_id,
+            //         quantity: item.quantity,
+            //         price: item.price
+            //     }))
+            // });
+
             const orderItems = await OrderItemModel.findAll({
-                where: { order_id }
+                where: { order_id },
+                include: [{
+                    model: VariantModel,
+                    as: 'variant',
+                    attributes: ['id', 'name', 'price', 'stock', 'img_url'],
+                    include: [{
+                        model: ProductModel,
+                        as: 'product',
+                        attributes: ['id', 'name', 'description', 'image_url', 'total_sold'],
+                        include: [{
+                            model: UserModel,
+                            as: 'seller',
+                            attributes: ['id', 'name', 'address', 'profile_image', 'latitude', 'longitude']
+                        }]
+                    }]
+                }]
             });
 
             for (const item of orderItems) {
-                const product = await ProductModel.findByPk(item.product_id);
-                if (product) {
-                    if (product.stock < item.quantity) {
-                        return res.status(400).json({
-                            message: `Stok ${product.name} tidak mencukupi`
-                        });
-                    }
-                    await product.update({
-                        stock: product.stock - item.quantity,
-                        total_sold: product.total_sold + item.quantity
-                    });
+                const variant = item.variant;
+                if (variant && variant.product) {
+                    const product = variant.product;
+
+                    // Update total_sold produk
+                    const newTotalSold = (parseInt(product.total_sold) || 0) + item.quantity;
+                    await ProductModel.update({ total_sold: newTotalSold }, { where: { id: product.id } });
+                    await VariantModel.update({
+                        stock: variant.stock - item.quantity,
+                    }, { where: { id: variant.id } });
+
+                    console.log(`Updated product ${product.id}: total_sold +${item.quantity}`);
                 }
             }
 
-            // Create success history for COD
-            await OrderHistoryModel.create({
-                order_id,
-                user_id: currentUser.id,
-                status: "process",
-                note: 'Pembayaran COD Berhasil'
-            });
+
+            // Prepare items data for Pusher
+            const pusherItems = orderItems.map(item => ({
+                product_id: item.variant && item.variant.product ? item.variant.product.id : null,
+                name: item.variant && item.variant.product ? item.variant.product.name : null,
+                product_description: item.variant && item.variant.product ? item.variant.product.description : null,
+                image_url: item.variant && item.variant.product ? item.variant.product.image_url : null,
+                seller_id: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.id : null,
+                seller_name: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.name : null,
+                seller_address: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.address : null,
+                seller_profile_image: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.profile_image : null,
+                seller_latitude: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.latitude : null,
+                seller_longitude: item.variant && item.variant.product && item.variant.product.seller ? item.variant.product.seller.longitude : null,
+                variant_id: item.variant ? item.variant.id : null,
+                variant_name: item.variant ? item.variant.name : null,
+                price: item.price,
+                quantity: item.quantity
+            }));
+            // Get shipping info
+            const shippingInfo = order.shipping_cost[0];
 
             // Trigger Pusher for COD order
-            pusher.trigger('order-channel', 'cod-order-created', {
-                order_id,
+            pusher.trigger('orders', 'new-order', {
+                order_id: order.id,
                 user_id: currentUser.id,
+                customer_name: currentUser.username,
                 payment_method: 'COD',
-                amount,
+                amount: amount,
                 status: 'process',
-                items: orderItems.map(item => ({
-                    product_id: item.product_id,
-                    quantity: item.quantity,
-                    price: item.price
-                }))
+                order_date: new Date(),
+                shipping_cost: shippingInfo.shipping_cost,
+                distance: shippingInfo.distance,
+                address: shippingInfo.address,
+                items: pusherItems
             });
+
+
+
 
             return res.status(201).json({
                 message: "Pembayaran COD berhasil diproses",
@@ -802,22 +880,60 @@ const handleMidtransNotification = async(req, res) => {
                 note: 'Pembayaran transfer berhasil diproses'
             }, { transaction });
 
-            // Kurangi stok produk
+            // // Kurangi stok produk
+            // const orderItems = await OrderItemModel.findAll({
+            //     where: { order_id: payment.order_id },
+            //     transaction
+            // });
+
+            // for (const item of orderItems) {
+            //     const variant = await VariantModel.findByPk(item.variant_id, { transaction });
+            //     if (variant) {
+            //         if (variant.stock < item.quantity) {
+            //             throw new Error(`Stok ${variant.name} tidak mencukupi`);
+            //         }
+            //         await variant.update({
+            //             stock: variant.stock - item.quantity,
+            //             total_sold: variant.total_sold + item.quantity
+            //         }, { transaction });
+            //     }
+            // }
+
+            // Kurangi stok produk dan update total_sold
             const orderItems = await OrderItemModel.findAll({
                 where: { order_id: payment.order_id },
+                include: [{
+                    model: VariantModel,
+                    as: 'variant',
+                    include: [{
+                        model: ProductModel,
+                        as: 'product'
+                    }]
+                }],
                 transaction
             });
 
             for (const item of orderItems) {
-                const product = await ProductModel.findByPk(item.product_id, { transaction });
-                if (product) {
-                    if (product.stock < item.quantity) {
-                        throw new Error(`Stok ${product.name} tidak mencukupi`);
+                const variant = item.variant;
+                if (variant) {
+                    // Kurangi stok variant
+                    if (variant.stock < item.quantity) {
+                        throw new Error(`Stok ${variant.name} tidak mencukupi`);
                     }
-                    await product.update({
-                        stock: product.stock - item.quantity,
-                        total_sold: product.total_sold + item.quantity
+                    await variant.update({
+                        stock: variant.stock - item.quantity,
+                        total_sold: (variant.total_sold || 0) + item.quantity
                     }, { transaction });
+
+                    // TAMBAHKAN: Update total_sold produk
+                    if (variant.product) {
+                        await ProductModel.increment('total_sold', {
+                            by: item.quantity,
+                            where: { id: variant.product.id },
+                            transaction
+                        });
+                        console.log(`Updated product ${variant.product.id}: total_sold +${item.quantity}`);
+                    }
                 }
             }
 

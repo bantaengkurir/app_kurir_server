@@ -1,45 +1,91 @@
 const multer = require("multer");
 const { user: UserModel, product: ProductModel, review: ReviewModel, variant: VariantModel } = require("../models");
+const { Sequelize } = require("sequelize");
 
 /**
  * @param {import("express").Request} req
  * @param {import("express").Response} res
  * @param {import("express").NextFunction} _next
  */
-
 const index = async(req, res, _next) => {
     try {
-        let products = await ProductModel.findAll({
+        const currentUser = req.user;
+        // Ambil data produk dengan rating dan total reviews
+        const products = await ProductModel.findAll({
             include: [{
-                    model: UserModel,
-                    as: "seller",
-                },
-                {
-                    model: ReviewModel,
-                    as: "review",
-                }
-            ],
+                model: UserModel,
+                as: "seller",
+            }],
+            attributes: {
+                include: [
+                    [
+                        Sequelize.literal(`(
+                            SELECT AVG(r.rating)
+                            FROM variants v
+                            JOIN reviews r ON v.id = r.variant_id
+                            WHERE v.product_id = product.id
+                            AND r.rating IS NOT NULL
+                        )`),
+                        'rating'
+                    ],
+                    [
+                        Sequelize.literal(`(
+                            SELECT COUNT(r.id)
+                            FROM variants v
+                            JOIN reviews r ON v.id = r.variant_id
+                            WHERE v.product_id = product.id
+                            AND r.rating IS NOT NULL
+                        )`),
+                        'totalReviews'
+                    ]
+                ]
+            },
         });
 
-        // Menghitung rata-rata rating untuk setiap produk
-        products = products.map(product => {
-            const reviewsWithRating = product.review.filter(review => review.rating !== null);
-            const totalRating = reviewsWithRating.reduce((sum, review) => sum + review.rating, 0);
-            const averageRating = reviewsWithRating.length > 0 ? (totalRating / reviewsWithRating.length) : null;
+        // Ambil semua reviews untuk produk-produk tersebut
+        const productIds = products.map(p => p.id);
+        const reviews = await ReviewModel.findAll({
+            where: {
+                '$variant.product_id$': productIds
+            },
+            include: [{
+                    model: VariantModel,
+                    as: "variant",
+                    attributes: ['id', 'product_id'],
+                },
+                {
+                    model: UserModel, // Jika review memiliki user/pembeli
+                    as: "user",
+                    attributes: ['id', 'name']
+                }
+            ],
+            order: [
+                    ['createdAt', 'DESC']
+                ] // Urutkan dari yang terbaru
+        });
 
-            // Update rating produk
-            product.rating = averageRating;
+        // Gabungkan reviews ke masing-masing produk
+        const productsWithReviews = products.map(product => {
+            const productReviews = reviews.filter(review =>
+                review.variant && review.variant.product_id === product.id
+            );
 
-            return product;
+            return {
+                ...product.get({ plain: true }),
+                reviews: productReviews
+            };
         });
 
         return res.send({
             message: "Success",
-            data: products,
+            data: productsWithReviews,
         });
     } catch (error) {
         console.error("Error:", error);
-        return res.status(500).send({ message: "Internal Server Error" });
+        return res.status(500).send({
+            message: "Internal Server Error",
+            error: error.message
+        });
     }
 };
 
@@ -57,8 +103,8 @@ const indexSeller = async(req, res, _next) => {
                     seller_id: currentUser.id,
                 },
                 include: [{
-                    model: ReviewModel,
-                    as: "review",
+                    model: VariantModel,
+                    as: "variant",
                 }],
             });
 
@@ -98,62 +144,123 @@ const indexSeller = async(req, res, _next) => {
  * @param {import("express").Response} res
  * @param {import("express").NextFunction} _next
  */
+// const showDesc = async(req, res, _next) => {
+//     try {
+//         // const currentUser = req.user;
+//         let products;
+
+//         // Menentukan limit produk yang ditampilkan
+//         const limit = 10;
+
+//         // if (currentUser.role == "customer") {
+//         // Jika user adalah customer, tampilkan 10 produk teratas berdasarkan total_sold
+//         products = await ProductModel.findAll({
+//             order: [
+//                 ['total_sold', 'DESC']
+//             ], // Urutkan berdasarkan total_sold secara menurun
+//             limit: limit, // Batasi hasil hanya 10 produk
+//             include: [{
+//                     model: UserModel,
+//                     as: "seller",
+//                 },
+//                 {
+//                     model: VariantModel,
+//                     as: "variant", // Pastikan nama alias sesuai dengan yang didefinisikan di model
+//                 }
+//             ],
+//         });
+//         // } else if (currentUser.role == 'seller') {
+//         //     // Jika user adalah seller, tampilkan 10 produk teratas berdasarkan sold untuk seller tersebut
+//         // products = await ProductModel.findAll({
+//         //     where: {
+//         //         user_id: currentUser.id,
+//         //     },
+//         //     order: [
+//         //         ['sold', 'DESC']
+//         //     ], // Urutkan berdasarkan sold secara menurun
+//         //     limit: limit, // Batasi hasil hanya 10 produk
+//         //     include: [
+//         //         {
+//         //             model: ReviewModel,
+//         //             as: "review",
+//         //         }
+//         //     ],
+//         // });
+//         // } else {
+//         //     return res.status(403).send({ message: "role tidak valid" });
+//         // }
+
+//         // Menghitung rata-rata rating untuk setiap produk
+//         products = products.map(product => {
+//             const reviewsWithRating = product.review.filter(review => review.rating !== null);
+//             const totalRating = reviewsWithRating.reduce((sum, review) => sum + review.rating, 0);
+//             const averageRating = reviewsWithRating.length > 0 ? (totalRating / reviewsWithRating.length) : null;
+
+//             // Update rating produk
+//             product.rating = averageRating;
+
+//             return product;
+//         });
+
+//         return res.send({
+//             message: "Success",
+//             data: products,
+//         });
+//     } catch (error) {
+//         console.error("Error:", error);
+//         return res.status(500).send({ message: "Internal Server Error" });
+//     }
+// };
 const showDesc = async(req, res, _next) => {
     try {
-        // const currentUser = req.user;
-        let products;
-
-        // Menentukan limit produk yang ditampilkan
         const limit = 10;
-
-        // if (currentUser.role == "customer") {
-        // Jika user adalah customer, tampilkan 10 produk teratas berdasarkan total_sold
-        products = await ProductModel.findAll({
+        let products = await ProductModel.findAll({
             order: [
                 ['total_sold', 'DESC']
-            ], // Urutkan berdasarkan total_sold secara menurun
-            limit: limit, // Batasi hasil hanya 10 produk
+            ],
+            limit: limit,
             include: [{
                     model: UserModel,
                     as: "seller",
                 },
                 {
-                    model: ReviewModel,
-                    as: "review", // Pastikan nama alias sesuai dengan yang didefinisikan di model
+                    model: VariantModel,
+                    as: "variant",
+                    include: [ // Include reviews untuk setiap variant
+                        {
+                            model: ReviewModel,
+                            as: "review",
+                            attributes: ['rating'], // Ambil hanya rating
+                            where: { rating: {
+                                    [Sequelize.Op.ne]: null } } // Hanya rating valid
+                        }
+                    ]
                 }
             ],
         });
-        // } else if (currentUser.role == 'seller') {
-        //     // Jika user adalah seller, tampilkan 10 produk teratas berdasarkan sold untuk seller tersebut
-        // products = await ProductModel.findAll({
-        //     where: {
-        //         user_id: currentUser.id,
-        //     },
-        //     order: [
-        //         ['sold', 'DESC']
-        //     ], // Urutkan berdasarkan sold secara menurun
-        //     limit: limit, // Batasi hasil hanya 10 produk
-        //     include: [
-        //         {
-        //             model: ReviewModel,
-        //             as: "review",
-        //         }
-        //     ],
-        // });
-        // } else {
-        //     return res.status(403).send({ message: "role tidak valid" });
-        // }
 
-        // Menghitung rata-rata rating untuk setiap produk
+        // Hitung rata-rata rating per produk
         products = products.map(product => {
-            const reviewsWithRating = product.review.filter(review => review.rating !== null);
-            const totalRating = reviewsWithRating.reduce((sum, review) => sum + review.rating, 0);
-            const averageRating = reviewsWithRating.length > 0 ? (totalRating / reviewsWithRating.length) : null;
+            // Kumpulkan semua rating dari semua variant produk
+            let allRatings = [];
+            product.variant.forEach(variant => {
+                variant.review.forEach(review => {
+                    if (review.rating !== null) {
+                        allRatings.push(review.rating);
+                    }
+                });
+            });
 
-            // Update rating produk
-            product.rating = averageRating;
+            // Hitung rata-rata
+            const averageRating = allRatings.length > 0 ?
+                allRatings.reduce((a, b) => a + b, 0) / allRatings.length :
+                null;
 
-            return product;
+            // Tambahkan properti rating ke produk
+            return {
+                ...product.get({ plain: true }),
+                rating: averageRating
+            };
         });
 
         return res.send({
@@ -166,6 +273,7 @@ const showDesc = async(req, res, _next) => {
     }
 };
 
+
 /**
  * @param {import("express").Request} req
  * @param {import("express").Response} res
@@ -177,11 +285,21 @@ const show = async(req, res, next) => {
         const { id } = req.params;
 
         const product = await ProductModel.findByPk(id, {
-            attributes: ["id", "name", "description", "price", "stock", "image_url"],
+            attributes: ["id", "name", "description", "price", "stock", "image_url", "total_sold", "category"],
             include: [{
                 model: VariantModel,
                 as: "variant",
-            }],
+                include: [{
+                    model: ReviewModel,
+                    as: "review",
+                    include: [{
+                        model: UserModel,
+                        as: "user",
+                        attributes: ["id", "name"]
+                    }]
+                }]
+            }]
+
         });
 
         if (!product) {
