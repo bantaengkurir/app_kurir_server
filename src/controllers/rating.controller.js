@@ -112,7 +112,6 @@ const createRatProduct = async(req, res, _next) => {
             comment
         });
 
-        console.log("New rating:", newRating);
 
         return res.send({
             message: "rating created successfully",
@@ -141,7 +140,6 @@ const createRatCourier = async(req, res, _next) => {
             rating_time: new Date()
         });
 
-        console.log("New rating:", newRating);
 
         return res.send({
             message: "rating created successfully",
@@ -159,8 +157,6 @@ const updateRatProduct = async(req, res, _next) => {
     try {
         const currentUser = req.user.id;
         const { order_id, variant_id, rating, comment } = req.body;
-
-        console.log("request body update ini ", req.body);
 
 
         // Memastikan produk milik seller yang sedang login

@@ -25,7 +25,11 @@ module.exports = {
                 type: Sequelize.STRING
             },
             stock: {
-                type: Sequelize.INTEGER
+                type: Sequelize.INTEGER,
+            },
+            type: {
+                type: Sequelize.ENUM('regular', 'pre order'),
+                defaultValue: 'regular'
             },
             is_available: {
                 type: Sequelize.BOOLEAN,

@@ -138,8 +138,6 @@ const index = async(req, res, next) => {
             whereCondition.user_id = req.user.id;
         }
 
-        // console.log("user", req.user);
-
         const orders = await OrderModel.findAll({
             where: whereCondition, // Gunakan kondisi where yang sudah ditentukan
             include: [{
@@ -155,6 +153,11 @@ const index = async(req, res, next) => {
                             as: "courier_rating"
                         }
                     ]
+                },
+                {
+                    model: UserModel,
+                    as: "user",
+                    attributes: ["id", "name", "email", "profile_image", "phone_number", "latitude", "longitude"],
                 },
                 {
                     model: ShippingModel,
@@ -256,6 +259,7 @@ const index = async(req, res, next) => {
                     longitude: order.shipping_cost && order.shipping_cost.length > 0 ? order.shipping_cost[0].longitude : null,
                     distance: order.shipping_cost && order.shipping_cost.length > 0 ? order.shipping_cost[0].distance : null,
                     created_at: order.createdAt,
+                    user: order.user,
                     courier: {
                         id: order.couriers.id,
                         name: order.couriers.name,
@@ -519,11 +523,8 @@ const create = async(req, res, next) => {
     const { latitude, longitude } = shipping_cost || {};
     const currentUser = req.user;
 
-    console.log("body create product", req.body);
 
     const idOrder = items.map((item) => item.variant_id);
-
-    // console.log("body", req.body)
 
     if (idOrder.length === 0) {
         return res.status(400).send({ message: "Data tidak ditemukan" });
@@ -709,7 +710,6 @@ const create = async(req, res, next) => {
         // Konversi jarak dari meter ke kilometer
         const distanceInKm = courierDistance / 1000;
 
-        console.log("Jarak ke kurir:", distanceInKm, "km");
 
         // Jika jarak lebih dari 10 km, skip kurir ini
         if (distanceInKm >= 10) continue;
@@ -1253,7 +1253,6 @@ const cancelOrder = async(req, res, next) => {
             return res.status(404).send({ message: "Orderan tidak ditemukan" });
         }
 
-        // console.log("Status awal order:", order.status);
 
         if (order.status === "cancelled") {
             return res.status(400).send({ message: "Orderan sudah dibatalkan" });
@@ -1276,7 +1275,6 @@ const cancelOrder = async(req, res, next) => {
 
         // Periksa apakah pembaruan berhasil
         const updatedOrder = await OrderModel.findByPk(orderId);
-        // console.log("Status order setelah pembaruan:", updatedOrder.status);
 
         return res.send({ message: "Order cancelled successfully" });
     } catch (error) {
@@ -1412,8 +1410,6 @@ const updateStatus = async(req, res, next) => {
     const { status, note, availability, order_status } = req.body;
     const currentUser = req.user;
 
-    // console.log("ini current user dari payment", currentUser)
-
     // Mulai transaksi database
     const transaction = await sequelize.transaction();
 
@@ -1466,7 +1462,6 @@ const updateStatus = async(req, res, next) => {
             return res.status(404).send({ message: "Order not found" });
         }
 
-        console.log("ini order", order)
 
         // 2. Cek jika order sudah dibatalkan
         if (order.status == "cancelled") {
@@ -1529,7 +1524,6 @@ const updateStatus = async(req, res, next) => {
                 transaction,
             });
 
-            console.log("orderItems", orderItems)
 
             // Simpan rating untuk setiap product_id ke tabel product_ratings
             const ratingsData = orderItems.map((item) => ({

@@ -730,72 +730,259 @@ const { Op } = require("sequelize");
 //     }
 // };
 
+
+
+// const getUsersForSidebar = async(req, res) => {
+//     try {
+//         const loggedInUserId = req.user.id;
+
+//         // Ambil semua pengguna kecuali yang sedang login
+//         const allUsers = await User.findAll({
+//             where: {
+//                 id: {
+//                     [Op.ne]: loggedInUserId,
+//                 },
+//             },
+//             attributes: { exclude: ["password"] }, // Kecualikan kolom password
+//         });
+
+//         // Ambil semua pesan yang melibatkan pengguna yang sedang login
+//         const messages = await Message.findAll({
+//             where: {
+//                 [Op.or]: [
+//                     { sender_id: loggedInUserId }, // Pesan yang dikirim oleh pengguna yang sedang login
+//                     { receiver_id: loggedInUserId }, // Pesan yang diterima oleh pengguna yang sedang login
+//                 ],
+//             },
+//             include: [{
+//                     model: User,
+//                     as: 'sender', // Gunakan alias yang sesuai
+//                 },
+//                 {
+//                     model: User,
+//                     as: 'receiver', // Gunakan alias yang sesuai
+//                 },
+//             ],
+//         });
+
+//         // Buat daftar ID pengguna yang memiliki chat dengan pengguna yang sedang login
+//         const userIdsWithChat = new Set();
+//         messages.forEach(message => {
+//             if (message.sender_id === loggedInUserId) {
+//                 userIdsWithChat.add(message.receiver_id); // Tambahkan ID penerima
+//             } else {
+//                 userIdsWithChat.add(message.sender_id); // Tambahkan ID pengirim
+//             }
+//         });
+
+//         // Filter pengguna yang memiliki chat dengan pengguna yang sedang login
+//         const usersWithChat = allUsers.filter(user => userIdsWithChat.has(user.id));
+
+//         // Ambil daftar pengguna yang online dari socket.io
+//         const onlineUsers = getOnlineUsers();
+
+//         // Tandai pengguna yang online
+//         const usersWithOnlineStatus = usersWithChat.map(user => {
+//             const isOnline = onlineUsers.some(onlineUser => onlineUser === user.id);
+//             return {
+//                 ...user.toJSON(),
+//                 isOnline, // Tambahkan status online
+//             };
+//         });
+
+//         res.status(200).json(usersWithOnlineStatus);
+//         // console.log("Users with chat and online status:", usersWithOnlineStatus);
+//     } catch (error) {
+//         console.error("Error in getUsersForSidebar:", error.message);
+//         res.status(500).json({ error: "Internal server error" });
+//     }
+// };
+
+// const getUsersForSidebar = async(req, res) => {
+//     try {
+//         const loggedInUserId = req.user.id;
+
+//         // 1. Ambil semua pengguna kecuali yang sedang login
+//         const allUsers = await User.findAll({
+//             where: {
+//                 id: {
+//                     [Op.ne]: loggedInUserId
+//                 }
+//             },
+//             attributes: { exclude: ["password"] },
+//         });
+
+//         // 2. Ambil semua pesan yang melibatkan pengguna yang sedang login
+//         const messages = await Message.findAll({
+//             where: {
+//                 [Op.or]: [
+//                     { sender_id: loggedInUserId },
+//                     { receiver_id: loggedInUserId },
+//                 ],
+//             },
+//             include: [
+//                 { model: User, as: 'sender' },
+//                 { model: User, as: 'receiver' }
+//             ],
+//             order: [
+//                 ['createdAt', 'DESC']
+//             ],
+//         });
+
+//         // 3. Buat daftar ID pengguna yang pernah berinteraksi
+//         const userIdsWithChat = new Set();
+//         messages.forEach(message => {
+//             const otherUserId = message.sender_id === loggedInUserId ?
+//                 message.receiver_id :
+//                 message.sender_id;
+//             userIdsWithChat.add(otherUserId);
+//         });
+
+//         // 4. Filter pengguna yang pernah berinteraksi
+//         const usersWithChat = allUsers.filter(user => userIdsWithChat.has(user.id));
+
+//         // 5. Hitung pesan belum dibaca dan dapatkan last message
+//         const lastMessages = {};
+//         const unreadCounts = {};
+
+//         messages.forEach(message => {
+//             const otherUserId = message.sender_id === loggedInUserId ?
+//                 message.receiver_id :
+//                 message.sender_id;
+
+//             // Set last message
+//             if (!lastMessages[otherUserId]) {
+//                 lastMessages[otherUserId] = message;
+//             }
+
+//             // Hitung unread (hitung pesan dari pengirim lain yang belum dibaca)
+//             if (message.receiver_id === loggedInUserId && !message.read) {
+//                 unreadCounts[otherUserId] = (unreadCounts[otherUserId] || 0) + 1;
+//             }
+//         });
+
+//         // 6. Ambil daftar pengguna online
+//         const onlineUsers = getOnlineUsers();
+
+//         // 7. Gabungkan semua data
+//         const usersWithDetails = usersWithChat.map(user => ({
+//             ...user.get({ plain: true }),
+//             isOnline: onlineUsers.some(onlineUser => onlineUser === user.id),
+//             lastMessage: lastMessages[user.id] || null,
+//             unreadCount: unreadCounts[user.id] || 0,
+//         }));
+
+//         // 8. Urutkan berdasarkan pesan terbaru
+//         usersWithDetails.sort((a, b) => {
+//             const dateA = a.lastMessage ? new Date(a.lastMessage.createdAt) : new Date(0);
+//             const dateB = b.lastMessage ? new Date(b.lastMessage.createdAt) : new Date(0);
+//             return dateB - dateA;
+//         });
+
+//         res.status(200).json(usersWithDetails);
+//         // console.log("tttttttttttttrttttttttttttr", usersWithDetails.message)
+//     } catch (error) {
+//         console.error("Error in getUsersForSidebar:", error);
+//         res.status(500).json({ error: "Internal server error" });
+//     }
+// };
+
+
 const getUsersForSidebar = async(req, res) => {
     try {
         const loggedInUserId = req.user.id;
+        const loggedInUserRole = req.user.role; // Ambil role user yang sedang login
 
-        // Ambil semua pengguna kecuali yang sedang login
+        // 1. Ambil semua pengguna kecuali yang sedang login
         const allUsers = await User.findAll({
             where: {
                 id: {
-                    [Op.ne]: loggedInUserId,
-                },
+                    [Op.ne]: loggedInUserId
+                }
             },
-            attributes: { exclude: ["password"] }, // Kecualikan kolom password
+            attributes: { exclude: ["password"] },
         });
 
-        // Ambil semua pesan yang melibatkan pengguna yang sedang login
+        // 2. Ambil semua pesan yang melibatkan pengguna yang sedang login
         const messages = await Message.findAll({
             where: {
                 [Op.or]: [
-                    { sender_id: loggedInUserId }, // Pesan yang dikirim oleh pengguna yang sedang login
-                    { receiver_id: loggedInUserId }, // Pesan yang diterima oleh pengguna yang sedang login
+                    { sender_id: loggedInUserId },
+                    { receiver_id: loggedInUserId },
                 ],
             },
-            include: [{
-                    model: User,
-                    as: 'sender', // Gunakan alias yang sesuai
-                },
-                {
-                    model: User,
-                    as: 'receiver', // Gunakan alias yang sesuai
-                },
+            include: [
+                { model: User, as: 'sender' },
+                { model: User, as: 'receiver' }
+            ],
+            order: [
+                ['createdAt', 'DESC']
             ],
         });
 
-        // Buat daftar ID pengguna yang memiliki chat dengan pengguna yang sedang login
+        // 3. Buat daftar ID pengguna yang pernah berinteraksi
         const userIdsWithChat = new Set();
         messages.forEach(message => {
-            if (message.sender_id === loggedInUserId) {
-                userIdsWithChat.add(message.receiver_id); // Tambahkan ID penerima
-            } else {
-                userIdsWithChat.add(message.sender_id); // Tambahkan ID pengirim
+            const otherUserId = message.sender_id === loggedInUserId ?
+                message.receiver_id :
+                message.sender_id;
+            userIdsWithChat.add(otherUserId);
+        });
+
+        // 4. Filter pengguna berdasarkan role
+        let usersWithChat;
+        if (loggedInUserRole === 'admin') {
+            // Admin: tampilkan semua user
+            usersWithChat = allUsers;
+        } else {
+            // Bukan admin: hanya tampilkan yang pernah berinteraksi
+            usersWithChat = allUsers.filter(user => userIdsWithChat.has(user.id));
+        }
+
+        // 5. Hitung pesan belum dibaca dan dapatkan last message
+        const lastMessages = {};
+        const unreadCounts = {};
+
+        messages.forEach(message => {
+            const otherUserId = message.sender_id === loggedInUserId ?
+                message.receiver_id :
+                message.sender_id;
+
+            // Set last message
+            if (!lastMessages[otherUserId]) {
+                lastMessages[otherUserId] = message;
+            }
+
+            // Hitung unread (hanya untuk pesan yang diterima oleh user login)
+            if (message.receiver_id === loggedInUserId && !message.read) {
+                unreadCounts[otherUserId] = (unreadCounts[otherUserId] || 0) + 1;
             }
         });
 
-        // Filter pengguna yang memiliki chat dengan pengguna yang sedang login
-        const usersWithChat = allUsers.filter(user => userIdsWithChat.has(user.id));
-
-        // Ambil daftar pengguna yang online dari socket.io
+        // 6. Ambil daftar pengguna online
         const onlineUsers = getOnlineUsers();
 
-        // Tandai pengguna yang online
-        const usersWithOnlineStatus = usersWithChat.map(user => {
-            const isOnline = onlineUsers.some(onlineUser => onlineUser === user.id);
-            return {
-                ...user.toJSON(),
-                isOnline, // Tambahkan status online
-            };
+        // 7. Gabungkan semua data
+        const usersWithDetails = usersWithChat.map(user => ({
+            ...user.get({ plain: true }),
+            isOnline: onlineUsers.some(onlineUser => onlineUser === user.id),
+            lastMessage: lastMessages[user.id] || null,
+            unreadCount: unreadCounts[user.id] || 0,
+        }));
+
+        // 8. Urutkan berdasarkan pesan terbaru
+        usersWithDetails.sort((a, b) => {
+            const dateA = a.lastMessage ? new Date(a.lastMessage.createdAt) : new Date(0);
+            const dateB = b.lastMessage ? new Date(b.lastMessage.createdAt) : new Date(0);
+            return dateB - dateA;
         });
 
-        res.status(200).json(usersWithOnlineStatus);
-        // console.log("Users with chat and online status:", usersWithOnlineStatus);
+        res.status(200).json(usersWithDetails);
     } catch (error) {
-        console.error("Error in getUsersForSidebar:", error.message);
+        console.error("Error in getUsersForSidebar:", error);
         res.status(500).json({ error: "Internal server error" });
     }
 };
-
 
 
 const getMessages = async(req, res) => {
@@ -824,7 +1011,7 @@ const getMessages = async(req, res) => {
 };
 
 //ini berhasil web
-const sendMessageWeb = async(req, res) => {
+const sendMessage = async(req, res) => {
     try {
         const { text, img_url } = req.body; // Pesan teks dan gambar
         const { id: receiver_id } = req.params; // ID penerima
@@ -840,7 +1027,6 @@ const sendMessageWeb = async(req, res) => {
             image = uploadResponse.secure_url;
         }
 
-        console.log("image:", image);
 
         // Simpan pesan ke database
         const newMessage = await Message.create({
@@ -850,13 +1036,13 @@ const sendMessageWeb = async(req, res) => {
             img_url: image,
         });
 
-        console.log('newmessage', newMessage)
 
         // Kirim pesan ke penerima melalui socket jika online
         const receiverSocketId = getReceiverSocketId(receiver_id);
         if (receiverSocketId) {
             io.to(receiverSocketId).emit("newMessage", newMessage);
         }
+
 
         res.status(201).json(newMessage);
     } catch (error) {
@@ -979,76 +1165,135 @@ const sendMessageWeb = async(req, res) => {
 //     }
 // };
 
-const sendMessage = async(req, res) => {
+
+// ! ini keluar data consolenya
+const sendMessageWeb = async(req, res) => {
     try {
-        console.log('Received fields:', req.body);
+        const { text, image } = req.body;
+        const { id: receiverId } = req.params;
+        const senderId = req.user.id;
 
-        // 1. Handle text (ambil dari salah satu field)
-        const text = req.body.text || req.body.message || null;
-
-        // 2. Process image upload (jika ada file)
-        let imageUrl = null;
-        if (req.file) {
-            console.log('Received file info:', {
-                originalname: req.file.originalname,
-                size: req.file.size
-            });
-
-            console.log('Uploading image to Cloudinary...');
-            const uploadResult = await new Promise((resolve, reject) => {
-                const uploadStream = cloudinary.uploader.upload_stream({ folder: "chat_images" },
-                    (error, result) => {
-                        if (error) reject(error);
-                        else resolve(result);
-                    }
-                );
-
-                // Pastikan buffer ada sebelum mengupload
-                if (req.file.buffer) {
-                    uploadStream.end(req.file.buffer);
-                } else {
-                    reject(new Error('File buffer is missing'));
-                }
-            });
-
-            imageUrl = uploadResult.secure_url;
+        let imageUrl;
+        if (image) {
+            // Upload base64 image to cloudinary
+            const uploadResponse = await cloudinary.uploader.upload(image);
+            imageUrl = uploadResponse.secure_url;
         }
 
-        // Validasi: minimal harus ada text atau image
-        if (!text && !imageUrl) {
-            return res.status(400).json({
-                error: "Bad request",
-                message: "Either text or image is required"
-            });
-        }
-
-        // 3. Create message
-        console.log('Creating message with:', { text, imageUrl });
-        const newMessage = await Message.create({
-            sender_id: req.user.id,
-            receiver_id: req.params.id,
-            text: text,
-            img_url: imageUrl
+        const newMessage = new Message({
+            sender_id: senderId,
+            receiver_id: receiverId,
+            text,
+            img_url: imageUrl,
         });
 
-        console.log('Message created successfully:', newMessage);
+
+        await newMessage.save();
+
+        // Kirim ke receiver
+        const receiverSocketId = getReceiverSocketId(receiverId);
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("newMessage", newMessage);
+        }
+
+        // Kirim juga ke sender untuk update UI
+        const senderSocketId = getReceiverSocketId(senderId);
+        if (senderSocketId) {
+            io.to(senderSocketId).emit("newMessage", newMessage);
+        }
+
+
+        // const receiverSocketId = getReceiverSocketId(receiverId);
+        // console.log("iiiiiiiiiiiiiiiiiiiiini receiverSocket iddddddddddddd", receiverSocketId)
+        // if (receiverSocketId) {
+        //     io.to(receiverSocketId).emit("newMessage", newMessage);
+        // }
+
         res.status(201).json(newMessage);
-
     } catch (error) {
-        console.error('Full error details:', {
-            message: error.message,
-            stack: error.stack,
-            receivedData: {
-                text: req.body.text || req.body.message,
-                file: req.file ? true : false
-            }
-        });
-        res.status(500).json({
-            error: "Internal server error",
-            details: error.message
-        });
+        console.log("Error in sendMessage controller: ", error.message);
+        res.status(500).json({ error: "Internal server error" });
     }
 };
+// !sini
+
+
+
+// const sendMessageWeb = async(req, res) => {
+//     try {
+//         console.log('Received fields:', req.body);
+
+//         // 1. Handle text (ambil dari salah satu field)
+//         const text = req.body.text || req.body.message || null;
+
+//         // 2. Process image upload (jika ada file)
+//         let imageUrl = null;
+//         if (req.file) {
+//             console.log('Received file info:', {
+//                 originalname: req.file.originalname,
+//                 size: req.file.size
+//             });
+
+//             console.log('Uploading image to Cloudinary...');
+//             const uploadResult = await new Promise((resolve, reject) => {
+//                 const uploadStream = cloudinary.uploader.upload_stream({ folder: "chat_images" },
+//                     (error, result) => {
+//                         if (error) reject(error);
+//                         else resolve(result);
+//                     }
+//                 );
+
+//                 // Pastikan buffer ada sebelum mengupload
+//                 if (req.file.buffer) {
+//                     uploadStream.end(req.file.buffer);
+//                 } else {
+//                     reject(new Error('File buffer is missing'));
+//                 }
+//             });
+
+//             imageUrl = uploadResult.secure_url;
+//         }
+
+//         // Validasi: minimal harus ada text atau image
+//         if (!text && !imageUrl) {
+//             return res.status(400).json({
+//                 error: "Bad request",
+//                 message: "Either text or image is required"
+//             });
+//         }
+
+//         // 3. Create message
+//         console.log('Creating message with:', { text, imageUrl });
+//         const newMessage = await Message.create({
+//             sender_id: req.user.id,
+//             receiver_id: req.params.id,
+//             text: text,
+//             img_url: imageUrl
+//         });
+
+//         console.log('Message created successfully:', newMessage);
+
+//         const receiverSocketId = getReceiverSocketId(req.params.id);
+//         if (receiverSocketId) {
+//             io.to(receiverSocketId).emit("newMessage", newMessage);
+//         }
+//         res.status(201).json(newMessage);
+
+//     } catch (error) {
+//         console.error('Full error details:', {
+//             message: error.message,
+//             stack: error.stack,
+//             receivedData: {
+//                 text: req.body.text || req.body.message,
+//                 file: req.file ? true : false
+//             }
+//         });
+//         res.status(500).json({
+//             error: "Internal server error",
+//             details: error.message
+//         });
+//     }
+// };
 
 
 module.exports = { getUsersForSidebar, getMessages, sendMessage, sendMessageWeb };

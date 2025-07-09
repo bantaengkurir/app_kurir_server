@@ -130,10 +130,15 @@ const user = require("../models/user");
 //     }
 // };
 
+
+
 const validateToken = (req, res, next) => {
     try {
+        console.log("Received cookies:", req.cookies); // Log cookies yang diterima
+
         // Cek token dari berbagai sumber
         let token;
+
 
         // 1. Cek dari Authorization header
         if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
@@ -147,6 +152,7 @@ const validateToken = (req, res, next) => {
         else if (req.query.token) {
             token = req.query.token;
         }
+
 
         console.log("Token sources:", {
             authHeader: req.headers.authorization,
@@ -162,12 +168,20 @@ const validateToken = (req, res, next) => {
             });
         }
 
+        console.log("Token found:", token ? "Yes" : "No"); // Konfirmasi token
+        if (!token) {
+            return res.status(401).json({ /* ... */ });
+        }
+
         const userData = jwt.verify(token, process.env.JWT_SECRET);
         req.user = userData;
         next();
     } catch (error) {
-        // ... (error handling tetap sama)
-        console.error("Token validation error:", error.message);
+        console.error("JWT Error:", error.message); // Detail error JWT
+        if (error.name === 'TokenExpiredError') {
+            return res.status(401).json({ message: "Token expired" });
+        }
+        return res.status(401).json({ message: "Invalid token" });
     }
 };
 

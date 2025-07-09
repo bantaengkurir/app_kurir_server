@@ -44,7 +44,7 @@ const indexUser = async(req, res, next) => {
         // Pertama ambil semua user dengan data dasar
         const users = await UserModel.findAll({
             attributes: ["id", "name", "email", "address", "phone_number",
-                "profile_image", "role", "gender", "status", "is_verified", "created_at"
+                "profile_image", "role", "gender", "status", "is_verified", "verification_code", "created_at"
             ],
         });
         // Kemudian untuk setiap user, ambil asosiasi berdasarkan role

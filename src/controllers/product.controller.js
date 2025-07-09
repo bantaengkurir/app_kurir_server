@@ -13,9 +13,14 @@ const index = async(req, res, _next) => {
         // Ambil data produk dengan rating dan total reviews
         const products = await ProductModel.findAll({
             include: [{
-                model: UserModel,
-                as: "seller",
-            }],
+                    model: UserModel,
+                    as: "seller",
+                },
+                {
+                    model: VariantModel,
+                    as: "variant",
+                }
+            ],
             attributes: {
                 include: [
                     [
@@ -92,8 +97,6 @@ const index = async(req, res, _next) => {
 const indexSeller = async(req, res, _next) => {
     try {
         const currentUser = req.user;
-
-        console.log("user", currentUser);
 
         let products;
 
@@ -231,8 +234,11 @@ const showDesc = async(req, res, _next) => {
                             model: ReviewModel,
                             as: "review",
                             attributes: ['rating'], // Ambil hanya rating
-                            where: { rating: {
-                                    [Sequelize.Op.ne]: null } } // Hanya rating valid
+                            where: {
+                                rating: {
+                                    [Sequelize.Op.ne]: null
+                                }
+                            } // Hanya rating valid
                         }
                     ]
                 }
@@ -287,18 +293,24 @@ const show = async(req, res, next) => {
         const product = await ProductModel.findByPk(id, {
             attributes: ["id", "name", "description", "price", "stock", "image_url", "total_sold", "category"],
             include: [{
-                model: VariantModel,
-                as: "variant",
-                include: [{
-                    model: ReviewModel,
-                    as: "review",
+                    model: VariantModel,
+                    as: "variant",
                     include: [{
-                        model: UserModel,
-                        as: "user",
-                        attributes: ["id", "name"]
+                        model: ReviewModel,
+                        as: "review",
+                        include: [{
+                            model: UserModel,
+                            as: "user",
+                            attributes: ["id", "name"]
+                        }]
                     }]
-                }]
-            }]
+                },
+                {
+                    model: UserModel,
+                    as: "seller",
+                    attributes: ["id", "name", "profile_image", "email", "phone_number", "address", ]
+                }
+            ]
 
         });
 
@@ -332,17 +344,11 @@ const create = async(req, res, _next) => {
         const currentUser = req.user;
         const { seller_id, name, description, image_url, price, stock, category } = req.body;
 
-        console.log('id params', seller_id)
-
-        console.log("Request body:", req.body);
-
         if (!req.file) {
             return res.status(400).send({ message: "Gambar tidak ditemukan, pastikan gambar diunggah dengan benar" });
         }
 
         const image = req.file.path; // Cloudinary URL
-
-        console.log("image", image)
 
         // Perbaikan logika pengecekan role
         if (currentUser.role !== 'seller' && currentUser.role !== 'admin') {
@@ -375,7 +381,6 @@ const create = async(req, res, _next) => {
             category,
         });
 
-        console.log("New product:", newProduct);
 
         return res.send({
             message: "Product created successfully",
@@ -467,8 +472,6 @@ const update = async(req, res, _next) => {
         const { productId } = req.params;
         const image = req.file ? req.file.path : null; // Menjadi null jika tidak ada file
         const { name, description, image_url, price, stock, category } = req.body;
-
-        console.log("request body update", req.body)
 
 
         // Memastikan productId tidak undefined
@@ -632,7 +635,7 @@ const remove = async(req, res) => {
         const currentUser = req.user;
         const { productId } = req.body; // Sekarang mengambil dari body
 
-        console.log('Delete request received:', { productId, user: currentUser.id });
+        // console.log('Delete request received:', { productId, user: currentUser.id });
 
         if (!productId) {
             return res.status(400).json({ message: "Product ID is required" });

@@ -159,24 +159,45 @@
 const { Server } = require("socket.io");
 const http = require("http");
 const express = require("express");
-const { user: UserModel } = require("../models");
+const { user: UserModel, message: MessageModel } = require("../models");
+const { Op } = require("sequelize");
 
 const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:5175"],
+        origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003"],
         credentials: true,
         transports: ['websocket', 'polling']
     },
 });
 
 const userSocketMap = {};
+const onlineUsers = new Map(); // Map<userId, socketId>
+
+
+// function getReceiverSocketId(userId) {
+//     return userSocketMap[userId];
+// }
+
+// !diperbaiki 
+// function getReceiverSocketId(userId) {
+//     // Jika menyimpan array (multiple devices)
+//     if (Array.isArray(userSocketMap[userId])) {
+//         return userSocketMap[userId][0]; // Ambil socket pertama
+//     }
+//     return userSocketMap[userId]; // Untuk single socket
 
 function getReceiverSocketId(userId) {
-    return userSocketMap[userId];
+    if (!userSocketMap[userId]) return null;
+
+    // Kembalikan SEMUA socket ID
+    return Array.isArray(userSocketMap[userId]) ?
+        userSocketMap[userId] : [userSocketMap[userId]];
 }
+// }
+//! disini
 
 function getOnlineUsers() {
     return Object.keys(userSocketMap);
@@ -189,7 +210,27 @@ io.on("connection", async(socket) => {
 
     const userId = socket.handshake.query.userId;
     if (userId) {
-        userSocketMap[userId] = socket.id;
+        //! ini pembaruan
+
+        if (!userSocketMap[userId]) {
+            userSocketMap[userId] = [];
+        }
+
+
+
+        // Tambahkan socket ID ke array
+        userSocketMap[userId].push(socket.id);
+
+
+        // if (!userSocketMap[userId]) {
+        //     userSocketMap[userId] = [];
+        // }
+        // userSocketMap[userId].push(socket.id);
+
+
+        //! disini
+        // userSocketMap[userId] = socket.id;
+
 
         try {
             // Update status ke online
@@ -220,6 +261,378 @@ io.on("connection", async(socket) => {
             console.error("Error updating user status to online:", error);
         }
     }
+
+    // ! ini langsung tanpa axios di usechat store
+    socket.on("getMessages", async({ userId, otherUserId }) => {
+        try {
+            const messages = await MessageModel.findAll({
+                where: {
+                    [Op.or]: [
+                        { sender_id: userId, receiver_id: otherUserId },
+                        { sender_id: otherUserId, receiver_id: userId },
+                    ],
+                },
+                order: [
+                    ["createdAt", "ASC"]
+                ],
+            });
+
+            socket.emit("chatHistory", messages);
+        } catch (error) {
+            console.error("Error getting messages:", error);
+        }
+    });
+
+    // ! ini perbaikan 1 salah posisi
+    // socket.on("sendMessage", async(data) => {
+    //     try {
+    //         const { text, img_url, receiver_id } = data;
+    //         const sender_id = userId; // userId dari socket.handshake.query.userId
+    // console.log("ssssssssssssssssender id")
+
+    //         // Simpan ke DB
+    //         const newMessage = await MessageModel.create({
+    //             sender_id: userId,
+    //             receiver_id,
+    //             text,
+    //             img_url,
+    //         });
+
+    //         console.log("iiiiiiiiiiiiiiiiini", newMessage)
+
+
+    //         // KIRIM KE SEMUA SOCKET PENERIMA (perbaikan utama)
+    //         const receiverSocketIds = getReceiverSocketId(receiver_id);
+    //         if (receiverSocketIds) {
+    //             const ids = Array.isArray(receiverSocketIds) ?
+    //                 receiverSocketIds : [receiverSocketIds];
+
+    //             ids.forEach(socketId => {
+    //                 io.to(socketId).emit("newMessage", newMessage);
+    //             });
+    //         }
+
+    //         // KIRIM KE SEMUA SOCKET PENGIRIM
+    //         const senderSocketIds = getReceiverSocketId(userId);
+    //         if (senderSocketIds) {
+    //             const ids = Array.isArray(senderSocketIds) ?
+    //                 senderSocketIds : [senderSocketIds];
+
+    //             ids.forEach(socketId => {
+    //                 io.to(socketId).emit("newMessage", newMessage);
+    //             });
+    //         }
+
+    //         console.log("📤 Sent to all receiver sockets:", ids);
+
+    //         // // Kirim ke receiver
+    //         // const receiverSocketId = getReceiverSocketId(receiver_id);
+    //         // if (receiverSocketId) {
+    //         //     io.to(receiverSocketId).emit("newMessage", newMessage);
+    //         // }
+
+    //         // console.log("📤 Emit to receiver:", receiver_id, "=>", receiverSocketId);
+
+
+    //         // // Kirim juga ke sender untuk update UI
+    //         // socket.emit("newMessage", newMessage);
+
+    //     } catch (error) {
+    //         console.error("Error handling sendMessage via socket:", error);
+    //     }
+    // });
+
+
+    // ! ini perbaikan
+    socket.on("sendMessage", async(data) => {
+        try {
+            const { text, img_url, receiver_id } = data;
+            const sender_id = socket.handshake.query.userId;
+
+            // Pastikan format data konsisten
+            const messageData = {
+                sender_id: parseInt(sender_id),
+                receiver_id: parseInt(receiver_id),
+                text,
+                img_url,
+                createdAt: new Date() // Tambahkan timestamp
+            };
+
+            // Simpan ke DB
+            const newMessage = await MessageModel.create(messageData);
+
+            // Format response konsisten
+            const responseMessage = {
+                id: newMessage.id,
+                sender_id: newMessage.sender_id,
+                receiver_id: newMessage.receiver_id,
+                text: newMessage.text,
+                img_url: newMessage.img_url,
+                createdAt: newMessage.createdAt
+            };
+
+            // Kirim ke semua socket penerima
+            const receiverSockets = getReceiverSocketId(receiver_id);
+            if (receiverSockets) {
+                receiverSockets.forEach(socketId => {
+                    io.to(socketId).emit("newMessage", responseMessage);
+                });
+            }
+
+            // Kirim ke semua socket pengirim (untuk update UI)
+            const senderSockets = getReceiverSocketId(sender_id);
+            if (senderSockets) {
+                senderSockets.forEach(socketId => {
+                    io.to(socketId).emit("newMessage", responseMessage);
+                });
+            }
+
+        } catch (error) {
+            console.error("Error handling sendMessage:", error);
+        }
+    });
+
+
+    //! ini yang berfungsi sebelumnya diubah
+    // const getConversation = async(currentUserId) => {
+    //     const messages = await MessageModel.findAll({
+    //         where: {
+    //             [Op.or]: [
+    //                 { sender_id: currentUserId },
+    //                 { receiver_id: currentUserId }
+    //             ]
+    //         },
+    //         include: [
+    //             { model: User, as: 'sender', attributes: ['id', 'name', 'profile_pic'] },
+    //             { model: User, as: 'receiver', attributes: ['id', 'name', 'profile_pic'] }
+    //         ],
+    //         order: [
+    //             ['created_at', 'DESC']
+    //         ],
+    //         limit: 1000
+    //     });
+
+    //     const partnerMap = new Map();
+
+    //     messages.forEach((message) => {
+    //         const partnerId =
+    //             message.sender_id === currentUserId ?
+    //             message.receiver_id :
+    //             message.sender_id;
+
+    //         if (!partnerMap.has(partnerId)) {
+    //             partnerMap.set(partnerId, {
+    //                 partner: message.sender_id === currentUserId ?
+    //                     message.receiver : message.sender,
+    //                 lastMessage: message,
+    //                 unreadCount: 0
+    //             });
+    //         }
+
+    //         // Hitung pesan belum dibaca
+    //         if (
+    //             message.sender_id === partnerId &&
+    //             !message.is_read
+    //         ) {
+    //             partnerMap.get(partnerId).unreadCount++;
+    //         }
+    //     });
+
+    //     return Array.from(partnerMap.values()).map((conv) => ({
+    //         _id: conv.partner.id,
+    //         lastMessage: conv.lastMessage,
+    //         unreadCount: conv.unreadCount,
+    //         partner: conv.partner
+    //     }));
+    // };
+
+
+    // ! ini perbaikan
+    // [Fungsi getConversation - sudah dimodifikasi untuk Sequelize]
+    const getConversation = async(currentUserId) => {
+        try {
+            const messages = await MessageModel.findAll({
+                where: {
+                    [Op.or]: [
+                        { sender_id: currentUserId },
+                        { receiver_id: currentUserId }
+                    ]
+                },
+                include: [{
+                        model: UserModel,
+                        as: 'sender',
+                        attributes: ['id', 'name', 'profile_image']
+                    },
+                    {
+                        model: UserModel,
+                        as: 'receiver',
+                        attributes: ['id', 'name', 'profile_image']
+                    }
+                ],
+                order: [
+                    ['created_at', 'DESC']
+                ],
+                limit: 1000
+            });
+
+
+            const partnerMap = new Map();
+
+            messages.forEach((message) => {
+                const partnerId = message.sender_id === parseInt(currentUserId) ?
+                    message.receiver_id :
+                    message.sender_id;
+
+                // console.log("ssssssssssssssender id", message.sender_id)
+                // console.log("rrrrrrrrrrrrrrrreceiver id", message.receiver_id)
+                // console.log("ppppppppppppppppppppppartner map", partnerMap)
+                // console.log("mmmmmmmmmmmmmmmmmmmmmm read", message.is_read)
+
+                if (!partnerMap.has(partnerId)) {
+                    partnerMap.set(partnerId, {
+                        partner: message.sender_id === parseInt(currentUserId) ?
+                            message.receiver : message.sender,
+                        lastMessage: message,
+                        unreadCount: 0
+                    });
+                }
+
+                // Hitung pesan belum dibaca
+                if (message.sender_id === partnerId && !message.is_read) {
+                    partnerMap.get(partnerId).unreadCount++;
+                }
+            });
+
+            return Array.from(partnerMap.values()).map((conv) => ({
+                id: conv.partner.id.toString(), // KONVERSI KE STRING
+                lastMessage: conv.lastMessage,
+                unreadCount: conv.unreadCount,
+                partner: conv.partner
+            }));
+        } catch (error) {
+            console.error('Error getting conversation:', error);
+            return [];
+        }
+    };
+
+    // [Event Handler untuk Seen Status]
+    socket.on('seen', async(msgByUserId) => {
+        try {
+            const currentUserId = socket.handshake.query.userId;
+
+            if (!currentUserId || !msgByUserId) {
+                console.log('Missing user IDs in seen event');
+                return;
+            }
+
+            // 1. Update semua pesan yang belum dibaca dari pengirim tertentu
+            await MessageModel.update({ is_read: true }, {
+                where: {
+                    sender_id: msgByUserId,
+                    receiver_id: currentUserId,
+                    // is_read: false
+                }
+            });
+
+            // 2. Dapatkan percakapan terbaru untuk kedua belah pihak
+            const conversationSender = await getConversation(currentUserId);
+
+            const conversationReceiver = await getConversation(msgByUserId);
+
+
+
+            // Normalisasi ID sebelum mengirim
+
+            // 3. Kirim pembaruan ke semua perangkat pengguna
+            const senderSockets = getReceiverSocketId(currentUserId);
+            if (senderSockets) {
+                senderSockets.forEach(socketId => {
+                    io.to(socketId).emit('conversation', conversationSender);
+                });
+            }
+
+            const receiverSockets = getReceiverSocketId(msgByUserId);
+            if (receiverSockets) {
+                receiverSockets.forEach(socketId => {
+                    io.to(socketId).emit('conversation', conversationReceiver);
+                });
+            }
+
+
+
+            const normalizeConversation = (conv) => ({
+                ...conv,
+                id: conv.id.toString()
+            });
+
+            senderSockets.forEach(socketId => {
+                io.to(socketId).emit('conversation',
+                    conversationSender.map(normalizeConversation)
+                );
+            });
+
+
+
+            receiverSockets.forEach(socketId => {
+                io.to(socketId).emit('conversation',
+                    conversationReceiver.map(normalizeConversation)
+                );
+            });
+
+            // console.log("cccccccccccccccconversationsender", conversationSender)
+            // console.log("cccccccccccccccconversationreceiver", conversationReceiver)
+
+            // 3. Kirim pembaruan ke semua perangkat pengguna
+            // const senderSockets = getReceiverSocketId(currentUserId);
+            // if (senderSockets) {
+            //     senderSockets.forEach(socketId => {
+            //         io.to(socketId).emit('conversation', conversationSender);
+            //     });
+            // }
+
+            // const receiverSockets = getReceiverSocketId(msgByUserId);
+            // if (receiverSockets) {
+            //     receiverSockets.forEach(socketId => {
+            //         io.to(socketId).emit('conversation', conversationReceiver);
+            //     });
+            // }
+
+            // console.log("rrrrrrrrrrrrrrrreceiver socket", receiverSockets)
+
+            // console.log(`Pesan dari ${msgByUserId} ditandai sudah dibaca oleh ${currentUserId}`);
+
+        } catch (error) {
+            console.error('Error in seen event:', error);
+            // Kirim notifikasi error ke client
+            socket.emit('conversation-error', error.message);
+        }
+    });
+
+
+    // [BARU] Kirim ulang history chat jika ada di local storage client
+    socket.on("requestChatHistory", async({ userId, otherUserId }) => {
+        try {
+            // Cek di database
+            const messages = await MessageModel.findAll({
+                where: {
+                    [Op.or]: [
+                        { sender_id: userId, receiver_id: otherUserId },
+                        { sender_id: otherUserId, receiver_id: userId },
+                    ],
+                },
+                order: [
+                    ["createdAt", "ASC"]
+                ],
+            });
+
+            // Kirim ke client
+            socket.emit("chatHistory", messages);
+        } catch (error) {
+            console.error("Error getting messages:", error);
+        }
+    });
+
+
 
     // // Handle inisiasi panggilan
     // socket.on('initiate-call', ({ orderId, callerId, receiverId }) => {
@@ -327,6 +740,30 @@ io.on("connection", async(socket) => {
         }
     });
 
+
+
+
+    // Di dalam connection handler
+    socket.on("typing", (data) => {
+        const receiverSocketId = getReceiverSocketId(data.receiverId);
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("typing", {
+                senderId: socket.userId,
+                isTyping: true
+            });
+        }
+    });
+
+    socket.on("stopTyping", (data) => {
+        const receiverSocketId = getReceiverSocketId(data.receiverId);
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("typing", {
+                senderId: socket.userId,
+                isTyping: false
+            });
+        }
+    });
+
     // Kirim daftar pengguna online
     io.emit("getOnlineUsers", getOnlineUsers());
 
@@ -334,7 +771,17 @@ io.on("connection", async(socket) => {
         console.log("A user disconnected", socket.id);
 
         if (userId) {
-            delete userSocketMap[userId];
+            // delete userSocketMap[userId];
+            if (userSocketMap[userId]) {
+                userSocketMap[userId] = userSocketMap[userId].filter(
+                    id => id !== socket.id
+                );
+
+                // Hapus key jika array kosong
+                if (userSocketMap[userId].length === 0) {
+                    delete userSocketMap[userId];
+                }
+            }
 
             try {
                 await UserModel.update({ status: "offline" }, { where: { id: userId } });
@@ -355,3 +802,9 @@ io.on("connection", async(socket) => {
 });
 
 module.exports = { io, app, server, getReceiverSocketId, getOnlineUsers };
+
+
+
+
+
+// ! yang diperbaiki karena setelah direfresh data messagesnya hilang

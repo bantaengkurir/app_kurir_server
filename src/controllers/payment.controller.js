@@ -43,7 +43,6 @@ const index = async(req, res, _next) => {
     try {
         const currentUser = req.user;
 
-        console.log("user", currentUser)
 
         let payments;
 
@@ -595,8 +594,6 @@ const createPayment = async(req, res) => {
         const shippingCost = order.shipping_cost ? order.shipping_cost[0].shipping_cost || 0 : 0;
         const amount = parseFloat(order.total_price) + parseFloat(shippingCost);
 
-        console.log("shipping cost", shippingCost);
-        console.log("amount", amount);
 
         // Determine initial status based on payment method
         const initial_payment_status = payment_method === 'COD' ? 'completed' : 'pending';
@@ -745,7 +742,7 @@ const createPayment = async(req, res) => {
                         stock: variant.stock - item.quantity,
                     }, { where: { id: variant.id } });
 
-                    console.log(`Updated product ${product.id}: total_sold +${item.quantity}`);
+                    // console.log(`Updated product ${product.id}: total_sold +${item.quantity}`);
                 }
             }
 
@@ -809,11 +806,6 @@ const handleMidtransNotification = async(req, res) => {
         const midtransOrderId = notification.order_id;
         const transactionStatus = notification.transaction_status;
         const fraudStatus = notification.fraud_status;
-
-        console.log('notification', notification);
-        console.log('midtransOrderId', midtransOrderId);
-        console.log('transactionStatus', transactionStatus);
-        console.log('fraudStatus', fraudStatus);
 
 
         // ✅ Now `crypto.createHash` will work

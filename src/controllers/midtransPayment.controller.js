@@ -58,12 +58,12 @@ let snap = new midtransClient.Snap({
 // };
 
 const createTransaction = async(req, res) => {
-    console.log("Request Body:", req.body); // Debugging
+    // console.log("Request Body:", req.body); // Debugging
     const { orderId, totalEarnings } = req.body;
 
     const currentUser = req.user;
 
-    console.log("ini user yang akan diambil", currentUser)
+    // console.log("ini user yang akan diambil", currentUser)
 
     // Validasi input
     if (!orderId || !totalEarnings) {
@@ -111,7 +111,7 @@ const createTransaction = async(req, res) => {
             },
         };
 
-        console.log("parameter", parameter)
+        // console.log("parameter", parameter)
 
         const transaction = await snap.createTransaction(parameter);
         res.send({
@@ -143,7 +143,7 @@ const handleNotification = (req, res) => {
             const transactionStatus = statusResponse.transaction_status;
             const fraudStatus = statusResponse.fraud_status;
 
-            console.log(`Transaction notification received. Order ID: ${orderId}. Transaction status: ${transactionStatus}. Fraud status: ${fraudStatus}`);
+            // console.log(`Transaction notification received. Order ID: ${orderId}. Transaction status: ${transactionStatus}. Fraud status: ${fraudStatus}`);
 
             // Proses notifikasi sesuai kebutuhan Anda
             if (transactionStatus === "capture" && fraudStatus === "accept") {

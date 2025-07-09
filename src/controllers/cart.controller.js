@@ -48,8 +48,6 @@ const create = async(req, res, _next) => {
         const { variant_id, quantity } = req.body;
         const currentUser = req.user;
 
-        console.log("req.body", req.body);
-        console.log("currentUser", currentUser);
 
         // melakukan pengecekan terhadap inputan user
         if (!variant_id || !quantity) {

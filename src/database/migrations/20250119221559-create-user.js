@@ -57,7 +57,7 @@ module.exports = {
                 type: Sequelize.STRING
             },
             refresh_token: {
-                type: DataTypes.STRING,
+                type: Sequelize.STRING,
                 allowNull: true
             },
             created_at: {

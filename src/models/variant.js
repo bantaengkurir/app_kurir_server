@@ -40,6 +40,7 @@ module.exports = (sequelize, DataTypes) => {
         price: DataTypes.DECIMAL,
         sku: DataTypes.STRING,
         stock: DataTypes.INTEGER,
+        type: DataTypes.ENUM('regular', 'pre order'),
         is_available: DataTypes.BOOLEAN
     }, {
         sequelize,

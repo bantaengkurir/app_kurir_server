@@ -669,7 +669,6 @@ const cancelOrder = async(req, res, next) => {
             return res.status(404).send({ message: "Orderan tidak ditemukan" });
         }
 
-        console.log("Status awal order:", order.status);
 
         if (order.status === "cancelled") {
             return res.status(400).send({ message: "Orderan sudah dibatalkan" });
@@ -692,7 +691,6 @@ const cancelOrder = async(req, res, next) => {
 
         // Periksa apakah pembaruan berhasil
         const updatedOrder = await OrderModel.findByPk(orderId);
-        console.log("Status order setelah pembaruan:", updatedOrder.status);
 
         return res.send({ message: "Order cancelled successfully" });
     } catch (error) {

@@ -103,7 +103,6 @@ const resendEmail = async(req, res, next) => {
     try {
         // Cari user berdasarkan email
         const user = await UserModel.findOne({ where: { email } });
-        console.log('user', user)
 
         if (!user) {
             return res.status(404).send({ message: "User not found" });
@@ -126,7 +125,7 @@ const resendEmail = async(req, res, next) => {
         // Kirim email verifikasi baru
         await sendVerificationEmail(email, newVerificationCode);
 
-        console.log("Email verification resent to:", email, "Code:", newVerificationCode);
+        // console.log("Email verification resent to:", email, "Code:", newVerificationCode);
 
         return res.send({
             success: true,
@@ -165,8 +164,6 @@ const register = async(req, res, next) => {
 
     const image = req.file.path; // Cloudinary URL
 
-    console.log("image", image)
-
 
     try {
         // Validasi format email
@@ -192,8 +189,6 @@ const register = async(req, res, next) => {
 
         // Generate kode verifikasi
         const verificationCode = generateVerificationCode();
-
-        console.log("ini kode", verificationCode)
 
         // Hash password
         const passwordHash = await bcrypt.hash(password, 10);
@@ -242,19 +237,12 @@ const register = async(req, res, next) => {
 
 const verifyEmail = async(req, res, next) => {
     const { email, verification_code } = req.body;
-
-    console.log("body verifikasi kode", verification_code)
-    console.log("body ", req.body)
-
     try {
         const user = await UserModel.findOne({ where: { email } });
 
         if (!user) {
             return res.status(404).json({ message: "User not found" });
         }
-
-        console.log('user kode', user.verification_code)
-        console.log('kode', verification_code)
 
         if (user.verification_code !== verification_code) {
             return res.status(400).json({ message: "Invalid verification code" });
@@ -359,7 +347,6 @@ const login = async(req, res) => {
             profile_image: user.profile_image,
             role: user.role,
             createdAt: user.createdAt,
-            token: null, // Token tidak dikirim di body untuk web
         };
 
         // Generate tokens
@@ -370,8 +357,6 @@ const login = async(req, res) => {
         await UserModel.update({ refresh_token: refreshToken }, { where: { id: user.id } });
 
         const isMobileApp = req.headers['user-agent'].includes('Expo');
-        console.log("isMobileApp", isMobileApp)
-        console.log("Token:", token);
 
         if (isMobileApp) {
             return res.json({
@@ -404,94 +389,218 @@ const login = async(req, res) => {
     }
 }
 
-const loginWeb = async(req, res, next) => {
-    const { email, password } = req.body;
-    const currentDevice = req.headers['user-agent'] || 'Unknown Device'; // Deteksi perangkat
+// const loginWeb = async(req, res, next) => {
+//     const { email, password } = req.body;
+//     const currentDevice = req.headers['user-agent'] || 'Unknown Device'; // Deteksi perangkat
 
+//     try {
+//         const user = await UserModel.findOne({ where: { email } });
+
+//         if (!user) {
+//             return res.status(401).json({ message: "Invalid email/password" });
+//         }
+
+//         const isValid = await bcrypt.compare(password, user.password);
+
+//         if (!isValid) {
+//             return res.status(401).json({ message: "Invalid email/password" });
+//         }
+
+//         if (!user.is_verified) {
+//             return res.status(401).json({ message: "Email is not verified. Please verify your email first." });
+//         }
+
+//         // Jika perangkat baru
+//         // if (user.last_login_device !== currentDevice) {
+//         //     // Generate kode verifikasi
+//         const verificationCode = generateVerificationCode();
+//         user.verification_code = verificationCode;
+//         await user.save();
+
+//         //     // Kirim email verifikasi
+//         await sendVerificationEmail(user.email, verificationCode);
+
+//         //     return res.status(403).json({
+//         //         message: "New device detected. Please verify the code sent to your email.",
+//         //     });
+//         // }
+
+//         // Login sukses, update perangkat terakhir
+//         // user.last_login_device = currentDevice;
+//         user.verification_code = null; // Hapus kode verifikasi jika ada
+//         await user.save();
+
+//         // Set status online saat login
+//         // user.status = 'online';
+//         // await user.save();
+
+//         const data = {
+//             id: user.id,
+//             username: user.name,
+//             email: user.email,
+//             address: user.address,
+//             phone_number: user.phone_number,
+//             profile_image: user.profile_image,
+//             role: user.role
+//         };
+//         const token = jwt.sign(data, process.env.JWT_SECRET, {
+//             expiresIn: 24 * 60 * 60 * 1000 // Token berlaku 1 hari
+//                 // expiresIn: 60 * 1000 // Token berlaku selama 7 hari
+//         });
+
+//         // Simpan token ke dalam cookie
+//         res.cookie('jwt', token, {
+//             httpOnly: true, // Hanya dapat diakses oleh HTTP, bukan JavaScript
+//             secure: false,
+//             // process.env.NODE_ENV !== 'development', // Hanya HTTPS jika bukan di development
+//             sameSite: 'strict', // Mencegah CSRF
+//             maxAge: 24 * 60 * 60 * 1000 // Token berlaku 1 hari
+//                 // maxAge: 60 * 1000 // Token berlaku 7 hari
+//         });
+
+//         // Simpan data pengguna di cookie
+//         res.cookie('user_data', JSON.stringify(data), {
+//             httpOnly: false, // Dapat diakses oleh JavaScript
+//             secure: false,
+//             // process.env.NODE_ENV !== 'development',
+//             sameSite: 'strict',
+//             maxAge: 24 * 60 * 60 * 1000, // 1 hari
+//             // maxAge: 60 * 1000, // 7 hari
+//         });
+
+//         // const isProduction = process.env.NODE_MODE === 'production';
+
+//         // res.cookie('jwt', token, {
+//         //     httpOnly: true,
+//         //     secure: isProduction, // false di development
+//         //     sameSite: isProduction ? 'none' : 'lax',
+//         //     maxAge: 24 * 60 * 60 * 1000,
+//         //     domain: isProduction ? 'bantaeng-dessert.store' : 'localhost'
+//         // });
+
+//         // res.cookie('user_data', JSON.stringify(data), {
+//         //     httpOnly: false,
+//         //     secure: isProduction,
+//         //     sameSite: isProduction ? 'none' : 'lax',
+//         //     maxAge: 24 * 60 * 60 * 1000,
+//         //     domain: isProduction ? 'bantaeng-dessert.store' : 'localhost'
+//         // });
+
+//         return res.send({
+//             message: "Login successful",
+//             data: {
+//                 data,
+//                 token: token, // Opsional, jika Anda juga ingin mengembalikannya dalam respons
+//             },
+//         });
+//     } catch (err) {
+//         console.log("Error : ", err.message);
+//         res.status(500).json({ message: "Internal Server Error" });
+//     }
+// };
+
+
+
+// ! ini belum ada refresh tokennya
+// const loginWeb = async(req, res, next) => {
+//     const { email, password } = req.body;
+
+//     try {
+//         // Cari pengguna berdasarkan email
+//         const user = await UserModel.findOne({ where: { email } });
+
+//         if (!user) {
+//             return res.status(401).json({ message: "Invalid email/password" });
+//         }
+
+//         // Bandingkan password
+//         const isValid = await bcrypt.compare(password, user.password);
+//         if (!isValid) {
+//             return res.status(401).json({ message: "Invalid email/password" });
+//         }
+
+//         // Buat payload untuk token
+//         const data = {
+//             id: user.id,
+//             nama: user.nama,
+//             email: user.email,
+//             alamat: user.alamat,
+//             role: user.role,
+//         };
+
+//         // Buat token dengan masa berlaku (misalnya, 1 jam)
+//         const token = jwt.sign(data, process.env.JWT_SECRET, { expiresIn: "24h" });
+
+//         // Kirim respons ke frontend
+//         return res.send({
+//             message: "Login successful",
+//             data: {
+//                 user: data,
+//                 token: token,
+//             },
+//         });
+//     } catch (err) {
+//         console.error("Login error:", err);
+//         next(err);
+//     }
+// };
+
+
+// !ini dengan refresh token
+const loginWeb = async(req, res) => {
+    const { email, password } = req.body;
     try {
+
         const user = await UserModel.findOne({ where: { email } });
 
         if (!user) {
             return res.status(401).json({ message: "Invalid email/password" });
         }
 
-        const isValid = await bcrypt.compare(password, user.password);
+        if (!user.is_verified) {
+            return res.status(403).json({ message: "Youre account is unverified, please verify first !!" })
+        }
 
+        // Bandingkan password
+        const isValid = await bcrypt.compare(password, user.password);
         if (!isValid) {
             return res.status(401).json({ message: "Invalid email/password" });
         }
 
-        if (!user.is_verified) {
-            return res.status(401).json({ message: "Email is not verified. Please verify your email first." });
-        }
-
-        // Jika perangkat baru
-        // if (user.last_login_device !== currentDevice) {
-        //     // Generate kode verifikasi
-        const verificationCode = generateVerificationCode();
-        user.verification_code = verificationCode;
-        await user.save();
-
-        //     // Kirim email verifikasi
-        await sendVerificationEmail(user.email, verificationCode);
-
-        //     return res.status(403).json({
-        //         message: "New device detected. Please verify the code sent to your email.",
-        //     });
-        // }
-
-        // Login sukses, update perangkat terakhir
-        // user.last_login_device = currentDevice;
-        user.verification_code = null; // Hapus kode verifikasi jika ada
-        await user.save();
-
-        // Set status online saat login
-        // user.status = 'online';
-        // await user.save();
-
+        // Buat payload untuk token
         const data = {
             id: user.id,
             username: user.name,
             email: user.email,
             address: user.address,
-            phone_number: user.phone_number,
             profile_image: user.profile_image,
-            role: user.role
+            role: user.role,
         };
-        const token = jwt.sign(data, process.env.JWT_SECRET, {
-            expiresIn: 24 * 60 * 60 * 1000 // Token berlaku 1 hari
-                // expiresIn: 60 * 1000 // Token berlaku selama 7 hari
-        });
 
-        // Simpan token ke dalam cookie
-        res.cookie('jwt', token, {
-            httpOnly: true, // Hanya dapat diakses oleh HTTP, bukan JavaScript
-            secure: process.env.NODE_ENV !== 'development', // Hanya HTTPS jika bukan di development
-            sameSite: 'strict', // Mencegah CSRF
-            maxAge: 24 * 60 * 60 * 1000 // Token berlaku 1 hari
-                // maxAge: 60 * 1000 // Token berlaku 7 hari
-        });
 
-        // Simpan data pengguna di cookie
-        res.cookie('user_data', JSON.stringify(data), {
-            httpOnly: false, // Dapat diakses oleh JavaScript
-            secure: process.env.NODE_ENV !== 'development',
-            sameSite: 'strict',
-            maxAge: 24 * 60 * 60 * 1000, // 1 hari
-            // maxAge: 60 * 1000, // 7 hari
-        });
+        // Buat access token (5 menit) & refresh token (7 hari)
+        const accessToken = jwt.sign(data, process.env.JWT_SECRET, { expiresIn: "1h" });
+        const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
 
-        return res.send({
-            message: "Login successful",
+        // Simpan refresh token ke database
+        await UserModel.update({ refresh_token: refreshToken }, { where: { id: user.id } });
+
+        // Kirim ke frontend (localStorage)
+        res.json({
+            message: "Login success",
             data: {
-                data,
-                token: token, // Opsional, jika Anda juga ingin mengembalikannya dalam respons
+                user: data,
+                token: accessToken, // Simpan di localStorage
+                refreshToken, // Simpan di localStorage
             },
         });
-    } catch (err) {
-        console.log("Error : ", err.message);
-        res.status(500).json({ message: "Internal Server Error" });
+
+    } catch (error) {
+        console.error("Login error:", err);
+        next(err);
     }
+
+
 };
 
 
@@ -694,6 +803,19 @@ const logoutUser = async(req, res) => {
     }
 };
 
+const logoutUserWeb = async(req, res) => {
+    try {
+        // Jika Anda ingin menambahkan logika tambahan, seperti menandai pengguna sebagai "offline" di database:
+        // const userId = req.user.id; // Ambil ID pengguna dari token (jika menggunakan middleware auth)
+        // await UserModel.update({ status: 'offline' }, { where: { id: userId } });
+
+        // Kirim respons berhasil logout
+        return res.status(200).json({ message: "Successfully logged out." });
+    } catch (err) {
+        console.error("Error during logout:", err); // Untuk mempermudah debugging
+        return res.status(500).json({ message: "Internal Server Error" });
+    }
+};
 
 
 // const logoutUserWeb = async(req, res) => {
@@ -722,129 +844,96 @@ const logoutUser = async(req, res) => {
 //     }
 // };
 
-const logoutUserWeb = async(req, res) => {
-    try {
-        // 1. Dapatkan userId dari cookie JWT (jika ada)
-        const token = req.cookies.jwt;
-        let userId = null;
 
-        if (token) {
-            try {
-                userId = decodeJwt(token).id;
-            } catch (err) {
-                // Jika JWT invalid/expired, anggap user perlu logout paksa
-                console.warn("Invalid/expired JWT during logout");
-            }
-        }
+// ! menggunakan cookie
+// const logoutUserWeb = async(req, res) => {
+//     try {
+//         // 1. Dapatkan userId dari cookie JWT (jika ada)
+//         const token = req.cookies.jwt;
+//         let userId = null;
 
-        // 2. Update status user ke 'offline' (jika userId valid)
-        if (userId) {
-            await UserModel.update({ status: 'offline' }, { where: { id: userId } });
-        }
+//         if (token) {
+//             try {
+//                 userId = decodeJwt(token).id;
+//             } catch (err) {
+//                 // Jika JWT invalid/expired, anggap user perlu logout paksa
+//                 console.warn("Invalid/expired JWT during logout");
+//             }
+//         }
 
-        // 3. Hapus cookie JWT (tanpa peduli apakah userId ada/tidak)
-        res.clearCookie("jwt", {
-            httpOnly: true,
-            secure: process.env.NODE_ENV !== 'development',
-            sameSite: 'strict',
-            path: '/', // ← Pastikan path sama dengan saat cookie dibuat
-        });
+//         // 2. Update status user ke 'offline' (jika userId valid)
+//         if (userId) {
+//             await UserModel.update({ status: 'offline' }, { where: { id: userId } });
+//         }
 
-        // 4. Hapus cookie tambahan jika ada
-        res.clearCookie("otherCookieName");
+//         // 3. Hapus cookie JWT (tanpa peduli apakah userId ada/tidak)
+//         res.clearCookie("jwt", {
+//             httpOnly: true,
+//             secure: process.env.NODE_ENV !== 'development',
+//             sameSite: 'strict',
+//             path: '/', // ← Pastikan path sama dengan saat cookie dibuat
+//         });
 
-        return res.status(200).json({
-            success: true,
-            message: "Logout successful"
-        });
-    } catch (err) {
-        console.error("Logout error:", err);
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error during logout"
-        });
-    }
-};
+//         // 4. Hapus cookie tambahan jika ada
+//         res.clearCookie("otherCookieName");
+
+//         return res.status(200).json({
+//             success: true,
+//             message: "Logout successful"
+//         });
+//     } catch (err) {
+//         console.error("Logout error:", err);
+//         return res.status(500).json({
+//             success: false,
+//             message: "Internal server error during logout"
+//         });
+//     }
+// };
 
 // controllers/auth.controller.js
 const refreshToken = async(req, res) => {
-    const { refreshToken } = req.body;
+    const { refreshToken } = req.body; // Ambil dari localStorage frontend
 
     if (!refreshToken) {
-        return res.status(401).json({
-            success: false,
-            message: "Refresh token required",
-            code: "REFRESH_TOKEN_REQUIRED"
-        });
+        return res.status(401).json({ message: "Refresh token required" });
     }
 
     try {
-        let refreshToken;
-
-        // Ambil dari cookie atau body
-        if (req.cookies.refreshToken) {
-            refreshToken = req.cookies.refreshToken; // Web
-        } else {
-            refreshToken = req.body.refreshToken; // Mobile
-        }
-
-        // Verifikasi refresh token
+        // 1. Verifikasi refresh token
         const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
 
-        // Cek di database
-        const user = await UserModel.findOne({
-            where: {
-                id: decoded.id,
-                refresh_token: refreshToken
-            }
+        // 2. Cek di database
+        const user = await UserModel.findOne({ where: { id: decoded.id } });
+        if (user.refresh_token !== refreshToken) {
+            return res.status(401).json({ message: "Invalid refresh token" });
+        }
+
+        // 3. HAPUS refresh token lama (revoke)
+        await UserModel.update({ refresh_token: null }, { where: { id: user.id } });
+
+        // 4. BUAT access token baru (5 menit)
+        const newAccessToken = jwt.sign({ id: user.id, nama: user.nama, email: user.email, role: user.role },
+            process.env.JWT_SECRET, { expiresIn: "5m" }
+        );
+
+        // 5. BUAT refresh token baru (7 hari)
+        const newRefreshToken = jwt.sign({ id: user.id },
+            process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" }
+        );
+
+        // 6. SIMPAN refresh token baru ke database
+        await UserModel.update({ refresh_token: newRefreshToken }, { where: { id: user.id } });
+
+        // 7. KIRIM ke frontend (localStorage)
+        res.json({
+            token: newAccessToken, // Access token baru
+            refreshToken: newRefreshToken, // Refresh token baru (simpan lagi di localStorage)
         });
-
-        if (!user) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid refresh token",
-                code: "INVALID_REFRESH_TOKEN"
-            });
-        }
-
-        // Generate token baru
-        const newToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' });
-
-        if (req.cookies.refreshToken) {
-            // Set cookie baru untuk web
-            res.cookie('token', newToken, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
-                maxAge: 15 * 60 * 1000
-            });
-
-            return res.json({ success: true });
-        } else {
-            // Response untuk mobile
-            return res.json({
-                success: true,
-                token: newToken
-            });
-        }
     } catch (error) {
         console.error("Refresh token error:", error);
-
-        if (error.name === "TokenExpiredError") {
-            return res.status(401).json({
-                success: false,
-                message: "Refresh token expired",
-                code: "REFRESH_TOKEN_EXPIRED"
-            });
-        }
-
-        res.status(401).json({
-            success: false,
-            message: "Invalid refresh token"
-        });
+        res.status(401).json({ message: "Invalid or expired refresh token" });
     }
 };
-
 
 
 // Fungsi untuk mendecode JWT (mengambil payload)
@@ -866,5 +955,6 @@ module.exports = {
     checkAuth,
     logoutUser,
     logoutUserWeb,
-    resendEmail
+    resendEmail,
+    refreshToken
 };

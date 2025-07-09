@@ -149,7 +149,6 @@ const courierearningId = async(req, res) => {
 const sellerEarningById = async(req, res) => {
     const { id } = req.params;
 
-    console.log("Received seller_id:", id); // Debugging
 
     if (!id) {
         return res.status(400).send({
@@ -179,9 +178,6 @@ const sellerEarningById = async(req, res) => {
 
 const indexSeller = async(req, res, next) => {
     const { date } = req.query; // Ambil parameter tanggal dari query
-
-    console.log("Received date parameter:", date); // Debugging
-
     try {
         let whereCondition = {};
 
