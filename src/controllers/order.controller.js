@@ -701,28 +701,59 @@ const create = async(req, res, next) => {
     //     return res.status(400).send({ message: "Tidak ada courier dalam jangkauan" });
     // }
 
-    // Pilih kurir terdekat ke user
+    //! Pilih kurir terdekat ke user
+    // let closestCourier = null;
+    // let minDistance = Infinity;
+    // for (const courier of courierReady) { // Gunakan courierReady yang sudah difilter
+    //     const courierDistance = geolib.getDistance({ latitude, longitude }, { latitude: courier.latitude, longitude: courier.longitude });
+
+    //     // Konversi jarak dari meter ke kilometer
+    //     const distanceInKm = courierDistance / 1000;
+
+
+    //     // Jika jarak lebih dari 10 km, skip kurir ini
+    //     if (distanceInKm >= 10) continue;
+
+    //     if (courierDistance < minDistance) {
+    //         minDistance = courierDistance;
+    //         closestCourier = courier;
+    //     }
+    // }
+
+    // if (!closestCourier) {
+    //     return res.status(400).send({ message: "Tidak ada courier dalam jangkauan (semua kurir lebih dari 10 km)" });
+    // }
+
+    // Pilih kurir yang paling dekat dengan salah satu seller
     let closestCourier = null;
     let minDistance = Infinity;
-    for (const courier of courierReady) { // Gunakan courierReady yang sudah difilter
-        const courierDistance = geolib.getDistance({ latitude, longitude }, { latitude: courier.latitude, longitude: courier.longitude });
 
-        // Konversi jarak dari meter ke kilometer
-        const distanceInKm = courierDistance / 1000;
+    for (const courier of courierReady) {
+        // Hitung jarak kurir ke setiap seller
+        for (const group of sellerGroups) {
+            const seller = group.seller;
+            const courierDistance = geolib.getDistance({ latitude: seller.latitude, longitude: seller.longitude }, { latitude: courier.latitude, longitude: courier.longitude });
 
+            // Konversi jarak ke kilometer
+            const distanceInKm = courierDistance / 1000;
 
-        // Jika jarak lebih dari 10 km, skip kurir ini
-        if (distanceInKm >= 10) continue;
-
-        if (courierDistance < minDistance) {
-            minDistance = courierDistance;
-            closestCourier = courier;
+            // Cek apakah kurir dalam radius 10 km dari seller ini
+            if (distanceInKm <= 10) {
+                // Jika jarak lebih pendek dari minDistance, update kurir terdekat
+                if (courierDistance < minDistance) {
+                    minDistance = courierDistance;
+                    closestCourier = courier;
+                }
+            }
         }
     }
 
     if (!closestCourier) {
-        return res.status(400).send({ message: "Tidak ada courier dalam jangkauan (semua kurir lebih dari 10 km)" });
+        return res.status(400).send({
+            message: "Tidak ada kurir dalam 10 km dari toko manapun"
+        });
     }
+
 
     // Buat order
     const newOrder = await OrderModel.create({

@@ -27,6 +27,10 @@ module.exports = {
             stock: {
                 type: Sequelize.INTEGER
             },
+            availability: {
+                type: Sequelize.BOOLEAN,
+                defaultValue: false
+            },
             rating: {
                 type: Sequelize.DECIMAL(3, 2)
             },

@@ -134,7 +134,6 @@ const user = require("../models/user");
 
 const validateToken = (req, res, next) => {
     try {
-        console.log("Received cookies:", req.cookies); // Log cookies yang diterima
 
         // Cek token dari berbagai sumber
         let token;
@@ -152,13 +151,6 @@ const validateToken = (req, res, next) => {
         else if (req.query.token) {
             token = req.query.token;
         }
-
-
-        console.log("Token sources:", {
-            authHeader: req.headers.authorization,
-            cookies: req.cookies,
-            query: req.query
-        });
 
         if (!token) {
             return res.status(401).json({

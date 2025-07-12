@@ -94,6 +94,93 @@ const index = async(req, res, _next) => {
     }
 };
 
+const indexFirst = async(req, res, _next) => {
+    try {
+        const currentUser = req.user;
+        // Ambil data produk dengan rating dan total reviews
+        const products = await ProductModel.findAll({
+            include: [{
+                    model: UserModel,
+                    as: "seller",
+                },
+                {
+                    model: VariantModel,
+                    as: "variant",
+                }
+            ],
+            attributes: {
+                include: [
+                    [
+                        Sequelize.literal(`(
+                            SELECT AVG(r.rating)
+                            FROM variants v
+                            JOIN reviews r ON v.id = r.variant_id
+                            WHERE v.product_id = product.id
+                            AND r.rating IS NOT NULL
+                        )`),
+                        'rating'
+                    ],
+                    [
+                        Sequelize.literal(`(
+                            SELECT COUNT(r.id)
+                            FROM variants v
+                            JOIN reviews r ON v.id = r.variant_id
+                            WHERE v.product_id = product.id
+                            AND r.rating IS NOT NULL
+                        )`),
+                        'totalReviews'
+                    ]
+                ]
+            },
+        });
+
+        // Ambil semua reviews untuk produk-produk tersebut
+        const productIds = products.map(p => p.id);
+        const reviews = await ReviewModel.findAll({
+            where: {
+                '$variant.product_id$': productIds
+            },
+            include: [{
+                    model: VariantModel,
+                    as: "variant",
+                    attributes: ['id', 'product_id'],
+                },
+                {
+                    model: UserModel, // Jika review memiliki user/pembeli
+                    as: "user",
+                    attributes: ['id', 'name']
+                }
+            ],
+            order: [
+                    ['createdAt', 'DESC']
+                ] // Urutkan dari yang terbaru
+        });
+
+        // Gabungkan reviews ke masing-masing produk
+        const productsWithReviews = products.map(product => {
+            const productReviews = reviews.filter(review =>
+                review.variant && review.variant.product_id === product.id
+            );
+
+            return {
+                ...product.get({ plain: true }),
+                reviews: productReviews
+            };
+        });
+
+        return res.send({
+            message: "Success",
+            data: productsWithReviews,
+        });
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({
+            message: "Internal Server Error",
+            error: error.message
+        });
+    }
+};
+
 const indexSeller = async(req, res, _next) => {
     try {
         const currentUser = req.user;
@@ -532,6 +619,48 @@ const update = async(req, res, _next) => {
         }
     }
 };
+const updateAvailability = async(req, res, _next) => {
+    try {
+        const currentUser = req.user;
+        const { productId, availability } = req.body;
+
+        // Validasi payload
+        if (!productId || availability === undefined) {
+            return res.status(400).json({
+                message: "Product ID dan Availability harus disertakan"
+            });
+        }
+
+        // Cari produk
+        const product = await ProductModel.findOne({
+            where: { id: productId }
+        });
+
+        if (!product) {
+            return res.status(404).json({ message: "Produk tidak ditemukan" });
+        }
+
+        // Verifikasi hak akses
+        if (currentUser.role === 'seller' && product.userId !== currentUser.id) {
+            return res.status(403).json({
+                message: "Anda tidak memiliki akses untuk mengupdate produk ini"
+            });
+        }
+
+        // Update availability
+        await product.update({ availability });
+
+        return res.json({
+            message: "Availability produk berhasil diupdate",
+            data: { availability: product.availability }
+        });
+    } catch (error) {
+        console.error("Update Product Error:", error)
+        return res.status(500).json({
+            message: "Terjadi kesalahan pada server"
+        });
+    }
+};
 
 // const update = async(req, res) => {
 //     try {
@@ -683,4 +812,4 @@ const remove = async(req, res) => {
     }
 };
 
-module.exports = { index, indexSeller, showDesc, show, create, remove, update };
+module.exports = { index, indexFirst, indexSeller, showDesc, show, create, remove, update, updateAvailability };

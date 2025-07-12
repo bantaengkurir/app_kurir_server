@@ -549,7 +549,9 @@ const login = async(req, res) => {
 // !ini dengan refresh token
 const loginWeb = async(req, res) => {
     const { email, password } = req.body;
+    const currentDevice = req.headers['user-agent'] || 'Unknown Device'; // Deteksi perangkat
     try {
+
 
         const user = await UserModel.findOne({ where: { email } });
 
@@ -566,6 +568,32 @@ const loginWeb = async(req, res) => {
         if (!isValid) {
             return res.status(401).json({ message: "Invalid email/password" });
         }
+
+
+        // Jika perangkat baru
+        if (user.last_login_device !== currentDevice && user.role == 'courier') {
+            // Generate kode verifikasi
+            const verificationCode = generateVerificationCode();
+            user.verification_code = verificationCode;
+            await user.save();
+
+            // Kirim email verifikasi
+            await sendVerificationEmail(user.email, verificationCode);
+
+            return res.status(403).json({
+                message: "New device detected. Please verify the code sent to your email.",
+            });
+        }
+
+        // Login sukses, update perangkat terakhir
+        user.last_login_device = currentDevice;
+        user.verification_code = null; // Hapus kode verifikasi jika ada
+        await user.save();
+
+        // Set status online saat login
+        user.status = 'online';
+        await user.save();
+
 
         // Buat payload untuk token
         const data = {
@@ -604,25 +632,55 @@ const loginWeb = async(req, res) => {
 };
 
 
+// const verifyDevice = async(req, res, next) => {
+//     const { email, verification_code } = req.body;
+
+//     try {
+//         const user = await UserModel.findOne({ where: { email } });
+
+//         if (!user) {
+//             return res.status(404).json({ message: "User not found" });
+//         }
+
+//         if (user.verification_code !== verification_code) {
+//             return res.status(400).json({ message: "Invalid verification code" });
+//         }
+
+//         // Verifikasi perangkat sukses
+//         const currentDevice = req.headers['user-agent'] || 'Unknown Device';
+//         user.last_login_device = currentDevice;
+//         user.verification_code = null; // Hapus kode verifikasi
+//         await user.save();
+
+//         return res.send({
+//             message: "Device successfully verified. Please log in again.",
+//         });
+//     } catch (err) {
+//         next(err);
+//     }
+// };
+
 const verifyDevice = async(req, res, next) => {
     const { email, verification_code } = req.body;
+    const currentDevice = req.headers['user-agent'] || 'Unknown Device'; // Ambil dari header
 
     try {
         const user = await UserModel.findOne({ where: { email } });
 
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
+        if (!user) return res.status(404).json({ message: "User not found" });
         if (user.verification_code !== verification_code) {
             return res.status(400).json({ message: "Invalid verification code" });
         }
 
-        // Verifikasi perangkat sukses
-        const currentDevice = req.headers['user-agent'] || 'Unknown Device';
         user.last_login_device = currentDevice;
-        user.verification_code = null; // Hapus kode verifikasi
+        user.verification_code = null; // Hapus kode verifikasi jika ada
         await user.save();
+
+        // Gunakan update langsung untuk memastikan perubahan tersimpan
+        // await UserModel.update({
+        //     last_login_device: currentDevice,
+        //     verification_code: null
+        // }, { where: { email } });
 
         return res.send({
             message: "Device successfully verified. Please log in again.",
