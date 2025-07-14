@@ -19,8 +19,8 @@ const { Sequelize } = require("sequelize");
 // Konfigurasi Pusher
 const pusher = new Pusher({
     appId: "1948721",
-    key: "27dd26c02b96af0f4e50",
-    secret: "231f888aa4f383cb2b18",
+    key: process.env.PUSHER_KEY, // Pastikan ini sesuai dengan .env
+    secret: process.env.PUSHER_SECRET, // Pastikan ini sesuai dengan .env
     cluster: "ap1",
     useTLS: true
 });
@@ -28,8 +28,8 @@ const pusher = new Pusher({
 // Konfigurasi Midtrans
 const snap = new midtransClient.Snap({
     isProduction: false,
-    serverKey: "SB-Mid-server-t2OpglXq5gsZp_1BlSlfiamo",
-    clientKey: "SB-Mid-client-7-zhKMrkvYRGbMxq"
+    serverKey: process.env.MIDTRANS_SERVER_KEY, // Pastikan ini sesuai dengan .env
+    clientKey: process.env.MIDTRANS_CLIENT_KEY // Pastikan ini sesuai dengan .env
 });
 
 
