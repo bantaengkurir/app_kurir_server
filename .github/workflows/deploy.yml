@@ -13,7 +13,7 @@ jobs:
         uses: appleboy/ssh-action@master
         with:
           host: '54.206.45.136'
-          username: 'ubuntu'
+          username: 'root'
           key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
           port: 22
           script: |
