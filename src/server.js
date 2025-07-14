@@ -23,6 +23,9 @@ const callRouter = require('./routes/call.router');
 // Middleware
 app.use(cors({
     origin: [
+        "https://app-dessert-cra-admin.vercel.app",
+        "https://bantaeng-dessert.vercel.app",
+        "https://app-dessert-cra-courier.vercel.app",
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:3002",
