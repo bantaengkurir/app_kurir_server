@@ -1,4 +1,5 @@
 name: dessert_bantaeng
+
 on:
   push:
     branches: ['main']
@@ -17,21 +18,32 @@ jobs:
           key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            # Fix Node.js installation
-            curl -sL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-            sudo apt purge -y nodejs npm
+            # 1. Hapus Node.js versi lama dan konflik
+            sudo apt purge -y nodejs npm libnode-dev
+            sudo apt autoremove -y
+            
+            # 2. Install Node.js 22.x dengan clean state
+            curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
             sudo apt install -y nodejs
-
-            # Update npm & install PM2
-            sudo npm install -g npm@latest
-            sudo npm install -g pm2
-
-            # Prepare project directory
-            git config --global --add safe.directory /home/ubuntu/app_kurir_server
-            cd /home/ubuntu/app_kurir_server/src
+            
+            # 3. Verifikasi instalasi
+            node -v
+            npm -v
+            
+            # 4. Install global dependencies
+            sudo npm install -g npm@latest pm2
+            
+            # 5. Bersihkan perubahan lokal di repo
+            cd /home/ubuntu/app_kurier_server
+            git reset --hard
+            git clean -fd
+            
+            # 6. Update repo
+            git config --global --add safe.directory /home/ubuntu/app_kurier_server
             git pull origin main
-            npm install  # Install dependencies
-
-            # Restart PM2 process
+            
+            # 7. Install dependencies dan restart aplikasi
+            cd src
+            npm install
             pm2 delete bantaeng_dessert || true
             pm2 start ./server.js -n bantaeng_dessert
