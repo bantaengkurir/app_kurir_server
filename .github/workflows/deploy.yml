@@ -34,12 +34,12 @@ jobs:
             sudo npm install -g npm@latest pm2
             
             # 5. Bersihkan perubahan lokal di repo
-            cd /home/ubuntu/app_kurier_server
+            cd /home/ubuntu/app_kurir_server
             git reset --hard
             git clean -fd
             
             # 6. Update repo
-            git config --global --add safe.directory /home/ubuntu/app_kurier_server
+            git config --global --add safe.directory /home/ubuntu/app_kurir_server
             git pull origin main
             
             # 7. Install dependencies dan restart aplikasi
