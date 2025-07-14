@@ -27,8 +27,8 @@ jobs:
             sudo npm install -g pm2
 
             # Prepare project directory
-            git config --global --add safe.directory /home/ubuntu/app_kurier_server
-            cd /home/ubuntu/app_kurier_server/src
+            git config --global --add safe.directory /home/ubuntu/app_kurir_server
+            cd /home/ubuntu/app_kurir_server/src
             git pull origin main
             npm install  # Install dependencies
 
