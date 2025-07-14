@@ -1,5 +1,4 @@
 name: dessert_bantaeng
-
 on:
   push:
     branches: ['main']
@@ -14,16 +13,25 @@ jobs:
         uses: appleboy/ssh-action@master
         with:
           host: '54.206.45.136'
-          username: 'root'
+          username: 'ubuntu'
           key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
           port: 22
           script: |
-            git config --global --add safe.directory /home/ubuntu/app_kurier_server
-            curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            # Fix Node.js installation
+            curl -sL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+            sudo apt purge -y nodejs npm
             sudo apt install -y nodejs
+
+            # Update npm & install PM2
             sudo npm install -g npm@latest
             sudo npm install -g pm2
+
+            # Prepare project directory
+            git config --global --add safe.directory /home/ubuntu/app_kurier_server
             cd /home/ubuntu/app_kurier_server/src
             git pull origin main
-            pm2 delete bantaeng_dessert
-            pm2 start server.js -n bantaeng_dessert
+            npm install  # Install dependencies
+
+            # Restart PM2 process
+            pm2 delete bantaeng_dessert || true
+            pm2 start ./server.js -n bantaeng_dessert
