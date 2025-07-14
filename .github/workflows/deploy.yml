@@ -1,0 +1,39 @@
+name: dessert_bantaeng
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy using ssh
+        uses: appleboy/ssh-action@master
+        with:
+          host: '54.206.45.136'
+          username: 'root'
+          key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            git config --global --add safe.directory /home/ubuntu/app_kurier_server
+            
+            curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+            apt install -y nodejs
+
+            npm install -g npm@latest
+
+            # Ensure pm2 is installed
+            # Ensure pm2 is installed
+            npm install -g pm2
+
+            # Change to the project directory and execute the build script
+            cd /home/ubuntu/app_kurier_server/src
+            #chmod +x ./build.sh
+            #chmod +x ./build.sh
+            #./build.sh
+            git pull origin main
+            pm2 delete bantaeng_dessert
+            pm2 start server.js -n bantaeng_dessert
