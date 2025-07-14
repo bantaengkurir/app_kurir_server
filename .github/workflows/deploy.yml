@@ -37,3 +37,4 @@ jobs:
             git pull origin main
             pm2 delete bantaeng_dessert
             pm2 start server.js -n bantaeng_dessert
+          #pm2 start server.js -n bantaeng_dessert
