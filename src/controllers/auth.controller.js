@@ -686,7 +686,8 @@ const verifyDevice = async(req, res, next) => {
             message: "Device successfully verified. Please log in again.",
         });
     } catch (err) {
-        next(err);
+        console.error("Error in verifyDevice:", err.message);
+        res.status(500).json({ message: "Internal Server Error" });
     }
 };
 
