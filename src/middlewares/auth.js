@@ -162,7 +162,7 @@ const validateToken = (req, res, next) => {
 
         console.log("Token found:", token ? "Yes" : "No"); // Konfirmasi token
         if (!token) {
-            return res.status(401).json({ /* ... */ });
+            return res.status(401).json({ message: "Authorization token required" });
         }
 
         const userData = jwt.verify(token, process.env.JWT_SECRET);

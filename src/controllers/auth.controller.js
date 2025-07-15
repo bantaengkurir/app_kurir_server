@@ -601,8 +601,10 @@ const loginWeb = async(req, res) => {
             username: user.name,
             email: user.email,
             address: user.address,
+            phone_number: user.phone_number,
             profile_image: user.profile_image,
             role: user.role,
+            createdAt: user.createdAt,
         };
 
 

@@ -200,6 +200,16 @@ const createPayment = async(req, res) => {
                 }]
             });
 
+            const orders = await OrderModel.findOne({
+                where: { id: order_id },
+                include: [{
+                    model: UserModel,
+                    as: 'user',
+                }]
+            });
+
+
+
             // Gunakan transaction untuk COD juga
             const codTransaction = await sequelize.transaction();
 
@@ -261,7 +271,7 @@ const createPayment = async(req, res) => {
             const pusherData = {
                 order_id: order.id,
                 user_id: currentUser.id,
-                customer_name: currentUser.username,
+                customer_name: orders.user.name,
                 payment_method: 'COD',
                 amount: amount,
                 status: 'process',

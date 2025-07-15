@@ -260,7 +260,7 @@ io.on("connection", async(socket) => {
                     if (updatedUser && updatedUser.role === "courier") {
                         socket.emit("requestLocationUpdate");
                     }
-                }, 30000); // Update setiap 30 detik
+                }, 60000); // Update setiap 1 menit
 
                 // Simpan interval di socket
                 socket.locationInterval = locationInterval;
