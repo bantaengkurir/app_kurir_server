@@ -17,7 +17,8 @@ const {
     createCourier,
     showCourier,
     updateCourier,
-    showUsers
+    showUsers,
+    serviceFcm
     //  create, remove, update 
 } = require("../controllers/user.controller")
 
@@ -30,6 +31,7 @@ router.get("/couriersallery", validateToken, indexSallery);
 router.get("/my-courier", validateToken, showCourier);
 router.get("/:id", validateToken, show);
 router.post("/create-courier", validateToken, createCourier);
+router.post("/save-fcm-token", validateToken, serviceFcm);
 router.put("/update-courier", validateToken, updateCourier);
 // router.delete("/:productId", validateToken, remove);
 // router.put("/:productId", validateToken, upload.single("image_url"), update);

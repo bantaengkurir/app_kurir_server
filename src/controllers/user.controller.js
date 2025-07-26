@@ -415,6 +415,23 @@ const updateCourier = async(req, res, _next) => {
         console.error("Error:", error);
         return res.status(500).send({ message: "Internal Server Error" });
     }
+};
+
+const serviceFcm = async(req, res) => {
+    try {
+    const { fcm_token } = req.body;
+    const userId = req.user.id;
+
+    await UserModel.update(
+      { fcm_token },
+      { where: { id: userId } }
+    );
+
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Error saving FCM token:', error);
+    res.status(500).json({ error: 'Gagal menyimpan token' });
+  }
 }
 
 module.exports = {
@@ -426,5 +443,6 @@ module.exports = {
     show,
     createCourier,
     showCourier,
-    updateCourier
+    updateCourier,
+    serviceFcm
 };

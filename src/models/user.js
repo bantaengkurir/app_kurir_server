@@ -106,6 +106,7 @@ module.exports = (sequelize, DataTypes) => {
         last_login_device: DataTypes.STRING,
         status: DataTypes.STRING,
         refresh_token: DataTypes.STRING,
+        fcm_token: DataTypes.TEXT,
     }, {
         sequelize,
         modelName: 'user',
