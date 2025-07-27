@@ -1113,11 +1113,12 @@ const create = async(req, res, next) => {
 
         // Hitung total harga
         let totalPrice = 0;
+        let totalItems = 0;
         const orderItems = items.map((item) => {
             const variant = variants.find((b) => b.id === item.variant_id);
             const subtotal = variant.price * item.quantity;
             totalPrice += subtotal;
-
+            totalItems += item.quantity;
             return {
                 order_id: newOrder.id,
                 courier_id: newOrder.courier_id,
@@ -1128,6 +1129,10 @@ const create = async(req, res, next) => {
             };
         });
 
+        if (totalDistance > 10000) {
+            return res.status(400).send({ message: "Tidak ada kurir yang tersedia di sekitar lokasi Anda" });
+        }
+
         await OrderItemModel.bulkCreate(orderItems);
 
         await OrderModel.update({
@@ -1137,6 +1142,22 @@ const create = async(req, res, next) => {
             where: { id: newOrder.id },
         });
 
+        // Hitung biaya pengiriman berdasarkan kondisi
+        let finalShippingCost;
+        if (totalDistance <= 100) {
+            // Prioritas 1: Gratis untuk jarak sangat dekat
+            finalShippingCost = 0;
+        } else if (totalDistance <= 2000 && totalItems >= 3) {
+            // Prioritas 2: Gratis untuk jarak dekat + banyak item
+            finalShippingCost = 0;
+        } else if (totalDistance <= 500 && totalItems <= 3) { // Koreksi: 500 bukan 5000
+            // Biaya flat untuk jarak sangat dekat + sedikit item
+            finalShippingCost = 3000;
+        } else {
+            // Biaya standar akan dihitung dalam pembuatan shipping
+            finalShippingCost = null; // Akan diisi dari newShipping.shipping_cost
+        }
+
         // Buat data pengiriman
         const address = await reverseGeocode(latitude, longitude);
         const newShipping = await ShippingModel.create({
@@ -1145,39 +1166,33 @@ const create = async(req, res, next) => {
             latitude,
             longitude,
             distance: totalDistance,
-            shipping_cost: shipping,
+            shipping_cost: finalShippingCost !== null ? finalShippingCost : shipping, // Gunakan nilai yang sesuai
         });
 
-        //ubah status kurir menjadi "unready"
+        // Jika finalShippingCost null, ambil nilai dari newShipping
+        const actualShippingCost = finalShippingCost !== null ? finalShippingCost : newShipping.shipping_cost;
+
+        // Update status kurir menjadi "unready"
         await CourierModel.update({ availability: "unready" }, { where: { courier_id: newOrder.courier_id } });
 
-        // Buka koneksi WebSocket untuk customer dan kurir
+        // Kirim notifikasi via WebSocket
         io.emit("orderCreated", {
             orderId: newOrder.id,
             customerId: currentUser.id,
             courierId: closestCourier.id,
         });
 
-        // // Hitung total harga dan buat order items
-        // let totalPrice = 0;
-        // const orderItems = items.map((item) => {
-        //     const variant = variants.find(v => v.id === item.variant_id);
-        //     const subtotal = variant.price * item.quantity;
-        //     totalPrice += subtotal;
-
-        //     return {
-        //         order_id: newOrder.id,
-        //         courier_id: newOrder.courier_id,
-        //         variant_id: item.variant_id,
-        //         quantity: item.quantity,
-        //         price: variant.price,
-        //         subtotal: subtotal,
-        //     };
-        // });
-
-        // await OrderItemModel.bulkCreate(orderItems);
-        // await OrderModel.update({ total_price: totalPrice }, { where: { id: newOrder.id } });
-
+        // Response ke client
+        return res.send({
+            message: "Success",
+            data: {
+                order_id: newOrder.id,
+                order_code: newOrder.order_code,
+                total_price: totalPrice,
+                shipping_cost: actualShippingCost, // Gunakan nilai yang sudah dikoreksi
+                items: orderItems,
+            },
+        });
         // // Buat data pengiriman
         // const address = await reverseGeocode(latitude, longitude);
         // const newShipping = await ShippingModel.create({
@@ -1185,347 +1200,94 @@ const create = async(req, res, next) => {
         //     address,
         //     latitude,
         //     longitude,
-        //     shipping_cost: calculateShippingCost(latitude, longitude, sellerGroups),
+        //     distance: totalDistance,
+        //     shipping_cost: shipping,
         // });
 
-        // // Update status kurir
-        // await CourierModel.update({ availability: "unready" }, { where: { courier_id: closestCourier.id } });
+        // //ubah status kurir menjadi "unready"
+        // await CourierModel.update({ availability: "unready" }, { where: { courier_id: newOrder.courier_id } });
 
-        // // Kirim notifikasi ke kurir
-        // const orderDetails = {
-        //     id: newOrder.id,
-        //     code: newOrder.order_code,
-        //     total: totalPrice,
-        //     address: address,
-        //     items: items.map(item => ({
-        //         name: variants.find(v => v.id === item.variant_id).name,
-        //         quantity: item.quantity
-        //     }))
-        // };
-
-        // await sendFCMPushNotification(
-        //     closestCourier.id,
-        //     `Pesanan #${newOrder.order_code} telah ditugaskan ke Anda`,
-        //     orderDetails
-        // );
-
-        // // Kirim event via WebSocket
+        // // Buka koneksi WebSocket untuk customer dan kurir
         // io.emit("orderCreated", {
         //     orderId: newOrder.id,
         //     customerId: currentUser.id,
         //     courierId: closestCourier.id,
         // });
 
-        return res.send({
-            message: "Success",
-            data: {
-                order_id: newOrder.id,
-                order_code: newOrder.order_code,
-                total_price: totalPrice,
-                shipping_cost: newShipping.shipping_cost,
-                items: orderItems
-            },
-        });
+        // // // Hitung total harga dan buat order items
+        // // let totalPrice = 0;
+        // // const orderItems = items.map((item) => {
+        // //     const variant = variants.find(v => v.id === item.variant_id);
+        // //     const subtotal = variant.price * item.quantity;
+        // //     totalPrice += subtotal;
+
+        // //     return {
+        // //         order_id: newOrder.id,
+        // //         courier_id: newOrder.courier_id,
+        // //         variant_id: item.variant_id,
+        // //         quantity: item.quantity,
+        // //         price: variant.price,
+        // //         subtotal: subtotal,
+        // //     };
+        // // });
+
+        // // await OrderItemModel.bulkCreate(orderItems);
+        // // await OrderModel.update({ total_price: totalPrice }, { where: { id: newOrder.id } });
+
+        // // // Buat data pengiriman
+        // // const address = await reverseGeocode(latitude, longitude);
+        // // const newShipping = await ShippingModel.create({
+        // //     order_id: newOrder.id,
+        // //     address,
+        // //     latitude,
+        // //     longitude,
+        // //     shipping_cost: calculateShippingCost(latitude, longitude, sellerGroups),
+        // // });
+
+        // // // Update status kurir
+        // // await CourierModel.update({ availability: "unready" }, { where: { courier_id: closestCourier.id } });
+
+        // // // Kirim notifikasi ke kurir
+        // // const orderDetails = {
+        // //     id: newOrder.id,
+        // //     code: newOrder.order_code,
+        // //     total: totalPrice,
+        // //     address: address,
+        // //     items: items.map(item => ({
+        // //         name: variants.find(v => v.id === item.variant_id).name,
+        // //         quantity: item.quantity
+        // //     }))
+        // // };
+
+        // // await sendFCMPushNotification(
+        // //     closestCourier.id,
+        // //     `Pesanan #${newOrder.order_code} telah ditugaskan ke Anda`,
+        // //     orderDetails
+        // // );
+
+        // // // Kirim event via WebSocket
+        // // io.emit("orderCreated", {
+        // //     orderId: newOrder.id,
+        // //     customerId: currentUser.id,
+        // //     courierId: closestCourier.id,
+        // // });
+
+        // return res.send({
+        //     message: "Success",
+        //     data: {
+        //         order_id: newOrder.id,
+        //         order_code: newOrder.order_code,
+        //         total_price: totalPrice,
+        //         shipping_cost: newShipping.shipping_cost,
+        //         items: orderItems
+        //     },
+        // });
 
     } catch (error) {
         console.error('Error in order creation:', error);
         return res.status(400).send({ message: error.message });
     }
 };
-
-//! Dengan perhitungan jarak dari seller ke kurir dan dari kurir ke user
-
-// const create = async(req, res, next) => {
-//     try {
-//         const { items, payment_method, shipping_cost } = req.body;
-//         const { latitude, longitude } = shipping_cost || {};
-//         const currentUser = req.user;
-
-//         // Validasi input
-//         if (!items || items.length === 0) {
-//             return res.status(400).send({ message: "Produk Tidak Boleh Kosong !!" });
-//         }
-//         if (!latitude || !longitude) {
-//             return res.status(400).send({ message: "Harap Pilih Lokasi Terlebih Dahulu" });
-//         }
-//         if (!currentUser || !currentUser.id) {
-//             return res.status(401).send({ message: "User Tidak Memiliki Izin" });
-//         }
-
-//         // Ekstrak variant IDs dari items
-//         const variantIds = items.map(item => item.variant_id);
-
-//         // Ambil data variants dengan informasi seller
-//         const variants = await VariantModel.findAll({
-//             where: { id: variantIds },
-//             include: [{
-//                 model: ProductModel,
-//                 as: 'product',
-//                 include: [{
-//                     model: UserModel,
-//                     as: 'seller',
-//                     attributes: ['id', 'latitude', 'longitude']
-//                 }]
-//             }]
-//         });
-
-//         if (variants.length !== variantIds.length) {
-//             return res.status(400).send({ message: "Variant Tidak Ditemukan" });
-//         }
-
-//         // Kelompokkan variants berdasarkan seller
-//         const sellers = variants.reduce((acc, variant) => {
-//             const sellerId = variant.product.seller.id;
-//             if (!acc[sellerId]) {
-//                 acc[sellerId] = {
-//                     seller: variant.product.seller,
-//                     variants: []
-//                 };
-//             }
-//             acc[sellerId].variants.push(variant);
-//             return acc;
-//         }, {});
-
-//         const sellerGroups = Object.values(sellers);
-
-//         // Validasi lokasi seller
-//         for (const group of sellerGroups) {
-//             const seller = group.seller;
-//             if (!seller.latitude || !seller.longitude) {
-//                 return res.status(400).send({
-//                     message: `Seller ${seller.id} Memiliki Lokasi Yang tidak Valid`
-//                 });
-//             }
-//         }
-
-//         // Generate order code
-//         const orderCode = "01" + Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-
-//         // Ambil kurir yang tersedia (online + ready + free)
-//         const courierReady = await UserModel.findAll({
-//             where: {
-//                 role: "courier",
-//                 status: "online",
-//             },
-//             include: [{
-//                 model: CourierModel,
-//                 as: "courier",
-//                 where: {
-//                     availability: "ready",
-//                     order_status: "free",
-//                 },
-//                 required: true,
-//             }],
-//             attributes: ['id', 'latitude', 'longitude'],
-//         });
-
-//         if (courierReady.length === 0) {
-//             return res.status(400).send({ message: "Tidak Ada Kurir Yang Tersedia !!" });
-//         }
-
-//         // Fungsi menghitung jarak (Haversine formula)
-//         const calculateDistance = (loc1, loc2) => {
-//             const R = 6371e3; // Earth radius in meters
-//             const φ1 = loc1.latitude * Math.PI / 180;
-//             const φ2 = loc2.latitude * Math.PI / 180;
-//             const Δφ = (loc2.latitude - loc1.latitude) * Math.PI / 180;
-//             const Δλ = (loc2.longitude - loc1.longitude) * Math.PI / 180;
-
-//             const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-//                 Math.cos(φ1) * Math.cos(φ2) *
-//                 Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-//             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-//             return R * c; // Distance in meters
-//         };
-
-//         // Lokasi customer
-//         const customerLocation = { latitude, longitude };
-
-//         // Lokasi seller (unik)
-//         const sellerLocations = sellerGroups.map(group => ({
-//             latitude: group.seller.latitude,
-//             longitude: group.seller.longitude,
-//             sellerId: group.seller.id,
-//         }));
-
-//         // Temukan kurir yang memenuhi kriteria (≤10 km dari customer DAN ≤3 km dari SEMUA seller)
-//         let eligibleCouriers = [];
-//         for (const courier of courierReady) {
-//             const courierLocation = {
-//                 latitude: courier.latitude,
-//                 longitude: courier.longitude,
-//             };
-
-//             // 1. Cek jarak ke customer (harus ≤10 km)
-//             const distanceToCustomer = calculateDistance(courierLocation, customerLocation);
-//             if (distanceToCustomer > 10000) continue;
-
-//             // 2. Cek jarak ke SEMUA seller (harus ≤3 km masing-masing)
-//             let isAllSellersInRange = true;
-//             for (const seller of sellerLocations) {
-//                 const distanceToSeller = calculateDistance(courierLocation, seller);
-//                 if (distanceToSeller > 3000) {
-//                     isAllSellersInRange = false;
-//                     break;
-//                 }
-//             }
-
-//             if (isAllSellersInRange) {
-//                 eligibleCouriers.push({
-//                     courier,
-//                     distanceToCustomer,
-//                 });
-//             }
-//         }
-
-//         // Fallback: Jika tidak ada kurir yang memenuhi semua kriteria
-//         let selectedCourier = null;
-//         if (eligibleCouriers.length === 0) {
-//             let bestCourier = null;
-//             let maxSellersCovered = 0;
-//             let minDistanceToCustomer = Infinity;
-
-//             for (const courier of courierReady) {
-//                 const courierLocation = {
-//                     latitude: courier.latitude,
-//                     longitude: courier.longitude,
-//                 };
-
-//                 const distanceToCustomer = calculateDistance(courierLocation, customerLocation);
-//                 if (distanceToCustomer > 10000) continue;
-
-//                 let sellersCovered = 0;
-//                 for (const seller of sellerLocations) {
-//                     const distanceToSeller = calculateDistance(courierLocation, seller);
-//                     if (distanceToSeller <= 3000) sellersCovered++;
-//                 }
-
-//                 if (
-//                     sellersCovered > maxSellersCovered ||
-//                     (sellersCovered === maxSellersCovered && distanceToCustomer < minDistanceToCustomer)
-//                 ) {
-//                     maxSellersCovered = sellersCovered;
-//                     minDistanceToCustomer = distanceToCustomer;
-//                     bestCourier = courier;
-//                 }
-//             }
-
-//             if (!bestCourier) {
-//                 return res.status(400).send({ message: "Tidak Ada Kurir Dalam Jangkauan !!" });
-//             }
-
-//             selectedCourier = bestCourier;
-//         } else {
-//             // Pilih kurir terdekat dari yang eligible
-//             eligibleCouriers.sort((a, b) => a.distanceToCustomer - b.distanceToCustomer);
-//             selectedCourier = eligibleCouriers[0].courier;
-//         }
-
-//         // Hitung jarak untuk biaya pengiriman
-//         // 1. Hitung jarak terjauh dari seller ke customer
-//         let maxSellerToCustomer = 0;
-//         for (const sellerLoc of sellerLocations) {
-//             const dist = calculateDistance(sellerLoc, customerLocation);
-//             if (dist > maxSellerToCustomer) {
-//                 maxSellerToCustomer = dist;
-//             }
-//         }
-
-//         // 2. Hitung jarak dari kurir ke seller terdekat
-//         let minCourierToSeller = Infinity;
-//         for (const sellerLoc of sellerLocations) {
-//             const dist = calculateDistance({ latitude: selectedCourier.latitude, longitude: selectedCourier.longitude },
-//                 sellerLoc
-//             );
-//             if (dist < minCourierToSeller) minCourierToSeller = dist;
-//         }
-
-//         // 3. Estimasi total jarak (kurir -> seller terdekat -> customer)
-//         const estimatedTotalDistance = minCourierToSeller + maxSellerToCustomer;
-
-//         // 4. Hitung biaya pengiriman
-//         let shippingCost = 5000; // Biaya dasar
-//         if (estimatedTotalDistance > 1000) {
-//             const additionalKm = Math.ceil((estimatedTotalDistance - 1000) / 1000);
-//             shippingCost += additionalKm * 1500;
-//         }
-
-//         // Buat order
-//         const newOrder = await OrderModel.create({
-//             user_id: currentUser.id,
-//             courier_id: selectedCourier.id,
-//             order_date: new Date(),
-//             payment_method,
-//             order_code: orderCode,
-//             status: "Pending",
-//         });
-
-//         // Hitung total harga dan buat order items
-//         let totalPrice = 0;
-//         const orderItems = items.map(item => {
-//             const variant = variants.find(v => v.id === item.variant_id);
-//             const subtotal = variant.price * item.quantity;
-//             totalPrice += subtotal;
-
-//             return {
-//                 order_id: newOrder.id,
-//                 variant_id: item.variant_id,
-//                 quantity: item.quantity,
-//                 price: variant.price,
-//                 subtotal,
-//             };
-//         });
-
-//         await OrderItemModel.bulkCreate(orderItems);
-
-//         // Update order dengan total harga
-//         await OrderModel.update({ total_price: totalPrice }, { where: { id: newOrder.id } });
-
-//         // Buat record pengiriman
-//         const newShipping = await ShippingModel.create({
-//             order_id: newOrder.id,
-//             address: "Customer Address", // Ganti dengan alamat sebenarnya
-//             latitude,
-//             longitude,
-//             distance: estimatedTotalDistance,
-//             shipping_cost: shippingCost,
-//         });
-
-//         // Update status kurir menjadi "unready"
-//         await CourierModel.update({ availability: "unready" }, { where: { courier_id: selectedCourier.id } });
-
-//         // Notifikasi via WebSocket
-//         io.emit("orderCreated", {
-//             orderId: newOrder.id,
-//             customerId: currentUser.id,
-//             courierId: selectedCourier.id,
-//         });
-
-//         return res.send({
-//             message: "Order created successfully",
-//             data: {
-//                 order_id: newOrder.id,
-//                 courier_id: selectedCourier.id,
-//                 total_price: totalPrice,
-//                 shipping_cost: shippingCost,
-//                 estimated_distance: estimatedTotalDistance,
-//                 items: orderItems.map(item => ({
-//                     variant_id: item.variant_id,
-//                     quantity: item.quantity,
-//                     price: item.price,
-//                     subtotal: item.subtotal,
-//                 })),
-//             },
-//         });
-
-//     } catch (error) {
-//         console.error("Error creating order:", error);
-//         return res.status(500).send({ message: "Terjadi kesalahan saat membuat order" });
-//     }
-// };
-
-
 
 
 /**
