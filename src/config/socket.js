@@ -702,27 +702,60 @@ io.on("connection", async(socket) => {
     //     }
 
     // });
+    // Handle accept-call dengan parameter yang konsisten
+    socket.on('accept-call', ({ orderId, callerId, receiverId }) => {
+        console.log(`📢 [BE] Call accepted for order: ${orderId}`);
+        console.log(`📢 [BE] Caller (customer): ${callerId}`);
+        console.log(`📢 [BE] Receiver (courier): ${receiverId}`);
 
-    socket.on('accept-call', ({ orderId, receiverId }) => {
-        const callerId = userId; // ID kurir yang menerima panggilan
-
-        console.log(`📢 [BE] Call accepted for order: ${orderId} by courier: ${callerId}, notifying customer: ${receiverId}`);
-
-        // Kirim ke semua device customer (caller)
-        const callerSockets = getReceiverSocketId(receiverId);
+        // Kirim notifikasi ke semua device customer (caller)
+        const callerSockets = getReceiverSocketId(callerId);
         if (callerSockets) {
             callerSockets.forEach(socketId => {
                 io.to(socketId).emit('call-accepted', {
                     orderId,
-                    callerId, // ID kurir
-                    receiverId: receiverId // ID customer
+                    callerId: receiverId, // ID kurir (yang menerima)
+                    receiverId: callerId // ID customer (yang memulai panggilan)
                 });
-                console.log(`📢 [BE] Sent call-accepted to customer ${receiverId} on socket ${socketId}`);
+                console.log(`📢 [BE] Sent call-accepted to customer ${callerId} on socket ${socketId}`);
             });
         } else {
-            console.error(`❌ [BE] Customer ${receiverId} not found in socket map`);
+            console.error(`❌ [BE] Customer ${callerId} not found in socket map`);
+        }
+
+        // Kirim notifikasi ke semua device kurir (receiver)
+        const receiverSockets = getReceiverSocketId(receiverId);
+        if (receiverSockets) {
+            receiverSockets.forEach(socketId => {
+                io.to(socketId).emit('call-accepted', {
+                    orderId,
+                    callerId: receiverId, // ID kurir
+                    receiverId: callerId // ID customer
+                });
+            });
         }
     });
+
+    // socket.on('accept-call', ({ orderId, receiverId }) => {
+    //     const callerId = userId; // ID kurir yang menerima panggilan
+
+    //     console.log(`📢 [BE] Call accepted for order: ${orderId} by courier: ${callerId}, notifying customer: ${receiverId}`);
+
+    //     // Kirim ke semua device customer (caller)
+    //     const callerSockets = getReceiverSocketId(receiverId);
+    //     if (callerSockets) {
+    //         callerSockets.forEach(socketId => {
+    //             io.to(socketId).emit('call-accepted', {
+    //                 orderId,
+    //                 callerId, // ID kurir
+    //                 receiverId: receiverId // ID customer
+    //             });
+    //             console.log(`📢 [BE] Sent call-accepted to customer ${receiverId} on socket ${socketId}`);
+    //         });
+    //     } else {
+    //         console.error(`❌ [BE] Customer ${receiverId} not found in socket map`);
+    //     }
+    // });
 
 
     // Reject call
@@ -809,44 +842,50 @@ io.on("connection", async(socket) => {
     // });
 
 
-    // Di backend socket.js
-    socket.on('webrtc-offer', async({ orderId, offer, receiverId }) => {
+
+    // Handle WebRTC signaling
+    socket.on('webrtc-offer', ({ orderId, offer, senderId, receiverId }) => {
         const receiverSockets = getReceiverSocketId(receiverId);
-        receiverSockets.forEach(socketId => {
-            io.to(socketId).emit('webrtc-offer', {
-                orderId,
-                offer: {
-                    type: offer.type,
-                    sdp: offer.sdp // Pastikan SDP asli diteruskan
-                },
-                callerId: socket.userId
+        console.log("ooooooooooooooooooooffer iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiini receiverSockets webrtc offer:", receiverSockets);
+        if (receiverSockets) {
+            receiverSockets.forEach(socketId => {
+                io.to(socketId).emit('webrtc-offer', {
+                    orderId,
+                    offer,
+                    senderId
+                });
             });
-        });
+        }
     });
 
-    socket.on('webrtc-answer', ({ orderId, answer, callerId }) => {
-        const callerSockets = getReceiverSocketId(callerId);
-        if (callerSockets) {
-            callerSockets.forEach(socketId => {
+    socket.on('webrtc-answer', ({ orderId, answer, senderId, receiverId }) => {
+        const receiverSockets = getReceiverSocketId(receiverId);
+        console.log("aaaaaaaaaaaaaaaaaaaaaaanswer iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii receiverSockets webrtc answer:", receiverSockets);
+        if (receiverSockets) {
+            receiverSockets.forEach(socketId => {
                 io.to(socketId).emit('webrtc-answer', {
                     orderId,
-                    answer
+                    answer,
+                    senderId
                 });
             });
         }
     });
 
-    socket.on('webrtc-ice-candidate', ({ orderId, candidate, targetUserId }) => {
-        const targetSockets = getReceiverSocketId(targetUserId);
-        if (targetSockets) {
-            targetSockets.forEach(socketId => {
+    socket.on('webrtc-ice-candidate', ({ orderId, candidate, senderId, receiverId }) => {
+        const receiverSockets = getReceiverSocketId(receiverId);
+        console.log("cccccccccccccccccccccandidate iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii receiverSockets webrtc candidate:", receiverSockets);
+        if (receiverSockets) {
+            receiverSockets.forEach(socketId => {
                 io.to(socketId).emit('webrtc-ice-candidate', {
                     orderId,
-                    candidate
+                    candidate,
+                    senderId
                 });
             });
         }
     });
+
     // Terima data lokasi dari client
     socket.on("updateLocation", async(locationData) => {
         try {
