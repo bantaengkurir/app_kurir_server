@@ -35,11 +35,11 @@ const { user: UserModel, product: ProductModel, order: OrderModel, shipping_cost
 const indexUser = async(req, res, next) => {
     try {
         // Cek apakah user yang sedang login adalah admin
-        if (req.user.role !== "admin") {
-            return res.status(403).send({
-                message: "Forbidden: You are not allowed to access this resource.",
-            });
-        }
+        // if (req.user.role !== "admin") {
+        //     return res.status(403).send({
+        //         message: "Forbidden: You are not allowed to access this resource.",
+        //     });
+        // }
 
         // Pertama ambil semua user dengan data dasar
         const users = await UserModel.findAll({
@@ -419,19 +419,16 @@ const updateCourier = async(req, res, _next) => {
 
 const serviceFcm = async(req, res) => {
     try {
-    const { fcm_token } = req.body;
-    const userId = req.user.id;
+        const { fcm_token } = req.body;
+        const userId = req.user.id;
 
-    await UserModel.update(
-      { fcm_token },
-      { where: { id: userId } }
-    );
+        await UserModel.update({ fcm_token }, { where: { id: userId } });
 
-    res.status(200).json({ success: true });
-  } catch (error) {
-    console.error('Error saving FCM token:', error);
-    res.status(500).json({ error: 'Gagal menyimpan token' });
-  }
+        res.status(200).json({ success: true });
+    } catch (error) {
+        console.error('Error saving FCM token:', error);
+        res.status(500).json({ error: 'Gagal menyimpan token' });
+    }
 }
 
 module.exports = {

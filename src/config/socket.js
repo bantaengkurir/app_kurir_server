@@ -174,6 +174,7 @@ const io = new Server(server, {
             "http://localhost:3000",
             "http://localhost:3001",
             "http://localhost:3002",
+            "http://localhost:5173"
 
         ],
         credentials: true,
@@ -642,145 +643,232 @@ io.on("connection", async(socket) => {
 
 
 
-    // // Handle inisiasi panggilan
-    // socket.on('initiate-call', ({ orderId, callerId, receiverId }) => {
-    //     const receiverSocketId = userSocketMap[receiverId];
-    //     if (receiverSocketId) {
-    //         io.to(receiverSocketId).emit('incoming-call', {
-    //             orderId,
-    //             callerId
-    //         });
-    //     }
-    // });
 
     // Di dalam io.on("connection", ...)
 
     // Initiate call
-    socket.on('initiate-call', ({ orderId, callerId, receiverId }) => {
-        console.log(`Iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiincoming call from ${callerId} to ${receiverId} dengan orderId ${orderId}`);
-
-        // Kirim ke semua device kurir
-        const receiverSockets = getReceiverSocketId(receiverId);
-        console.log("Rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrreceiver Sockets:", receiverSockets);
-        if (receiverSockets && receiverSockets.length > 0) {
-            receiverSockets.forEach(socketId => {
-                io.to(socketId).emit('incoming-call', {
-                    orderId,
-                    callerId,
-                    timestamp: Date.now(),
-                });
-                console.log(`📞 Incoming call sent to ${receiverId} on socket ${socketId}`);
-            });
+    socket.on('initiate-call', async ({ orderId, callerId, receiverId, signalData }) => {
+  console.log(`Iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiincoming call from ${callerId} to ${receiverId}`);
+  
+  const caller = await UserModel.findByPk(callerId);
+  const receiverSockets = getReceiverSocketId(receiverId);
+  
+  if (receiverSockets?.length) {
+    receiverSockets.forEach(socketId => {
+      io.to(socketId).emit('callToUser', {
+        orderId,
+        from: callerId,
+        name: caller.username,
+        email: caller.email,
+        profile_image: caller.profile_image,
+        signalData // Kirim signalData ke client penerima
+      });
+    });
         } else {
-            // Jika kurir offline
+            // Jika penerima offline
             const callerSockets = getReceiverSocketId(callerId);
             if (callerSockets) {
                 callerSockets.forEach(socketId => {
-                    io.to(socketId).emit('call-failed', {
-                        orderId,
-                        reason: 'Kurir tidak online'
+                    io.to(socketId).emit('userUnavailable', {
+                        message: 'User tidak online'
                     });
                 });
             }
         }
     });
 
-    // socket.on('accept-call', ({ orderId, receiverId }) => {
-    //     const callerId = userId; // ID kurir yang menerima panggilan
+    socket.on('webrtc-offer', ({ orderId, offer, receiverId }) => {
+  const receiverSockets = getReceiverSocketId(receiverId);
+  receiverSockets?.forEach(socketId => {
+    io.to(socketId).emit('webrtc-offer', { 
+      orderId,
+      offer,
+      senderId: socket.userId 
+    });
+  });
+});
 
-    //     console.log(`Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaccept call for order: ${orderId} from receiver: ${receiverId}`);
-    //     const callerSockets = getReceiverSocketId(receiverId); // receiverId adalah callerId asli
-    //     // console.log("Caaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaller Sockets:", callerSockets);
-    //     if (callerSockets) {
-    //         callerSockets.forEach(socketId => {
-    //             io.to(socketId).emit('call-accepted', {
-    //                 orderId,
-    //                 callerId, // ID kurir
-    //                 receiverId // ID customer
-    //             });
-    //         });
-    //     }
+    // Handle call acceptance
+    socket.on('accept-call', async({ orderId, callerId, receiverId }) => {
+        const receiver = await UserModel.findByPk(receiverId);
 
-    // });
-    // Handle accept-call dengan parameter yang konsisten
-    socket.on('accept-call', ({ orderId, callerId, receiverId }) => {
-        console.log(`📢 [BE] Call accepted for order: ${orderId}`);
-        console.log(`📢 [BE] Caller (customer): ${callerId}`);
-        console.log(`📢 [BE] Receiver (courier): ${receiverId}`);
-
-        // Kirim notifikasi ke semua device customer (caller)
         const callerSockets = getReceiverSocketId(callerId);
         if (callerSockets) {
             callerSockets.forEach(socketId => {
-                io.to(socketId).emit('call-accepted', {
-                    orderId,
-                    callerId: receiverId, // ID kurir (yang menerima)
-                    receiverId: callerId // ID customer (yang memulai panggilan)
-                });
-                console.log(`📢 [BE] Sent call-accepted to customer ${callerId} on socket ${socketId}`);
-            });
-        } else {
-            console.error(`❌ [BE] Customer ${callerId} not found in socket map`);
-        }
-
-        // Kirim notifikasi ke semua device kurir (receiver)
-        const receiverSockets = getReceiverSocketId(receiverId);
-        if (receiverSockets) {
-            receiverSockets.forEach(socketId => {
-                io.to(socketId).emit('call-accepted', {
-                    orderId,
-                    callerId: receiverId, // ID kurir
-                    receiverId: callerId // ID customer
+                io.to(socketId).emit('callAccepted', {
+                    from: receiverId,
+                    name: receiver.username,
+                    profile_image: receiver.profile_image
                 });
             });
         }
     });
 
-    // socket.on('accept-call', ({ orderId, receiverId }) => {
-    //     const callerId = userId; // ID kurir yang menerima panggilan
+    // Handle call rejection
+    socket.on('reject-call', async({ callerId, receiverId }) => {
+        const receiver = await UserModel.findByPk(receiverId);
 
-    //     console.log(`📢 [BE] Call accepted for order: ${orderId} by courier: ${callerId}, notifying customer: ${receiverId}`);
+        const callerSockets = getReceiverSocketId(callerId);
+        if (callerSockets) {
+            callerSockets.forEach(socketId => {
+                io.to(socketId).emit('callRejected', {
+                    from: receiverId,
+                    name: receiver.username,
+                    profile_image: receiver.profile_image
+                });
+            });
+        }
+    });
 
-    //     // Kirim ke semua device customer (caller)
-    //     const callerSockets = getReceiverSocketId(receiverId);
-    //     if (callerSockets) {
-    //         callerSockets.forEach(socketId => {
-    //             io.to(socketId).emit('call-accepted', {
+    // Handle call ending
+    socket.on('end-call', ({ callerId, receiverId }) => {
+        [callerId, receiverId].forEach(userId => {
+            const sockets = getReceiverSocketId(userId);
+            if (sockets) {
+                sockets.forEach(socketId => {
+                    io.to(socketId).emit('callEnded', {
+                        message: 'Panggilan diakhiri'
+                    });
+                });
+            }
+        });
+    });
+
+
+
+
+
+
+
+
+
+
+
+
+    // // // Handle inisiasi panggilan
+    // // socket.on('initiate-call', ({ orderId, callerId, receiverId }) => {
+    // //     const receiverSocketId = userSocketMap[receiverId];
+    // //     if (receiverSocketId) {
+    // //         io.to(receiverSocketId).emit('incoming-call', {
+    // //             orderId,
+    // //             callerId
+    // //         });
+    // //     }
+    // // });
+
+    // // Di dalam io.on("connection", ...)
+
+    // // Initiate call
+    // socket.on('initiate-call', ({ orderId, callerId, receiverId }) => {
+    //     console.log(`Iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiincoming call from ${callerId} to ${receiverId} dengan orderId ${orderId}`);
+
+    //     // Kirim ke semua device kurir
+    //     const receiverSockets = getReceiverSocketId(receiverId);
+    //     console.log("Rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrreceiver Sockets:", receiverSockets);
+    //     if (receiverSockets && receiverSockets.length > 0) {
+    //         receiverSockets.forEach(socketId => {
+    //             io.to(socketId).emit('incoming-call', {
     //                 orderId,
-    //                 callerId, // ID kurir
-    //                 receiverId: receiverId // ID customer
+    //                 callerId,
+    //                 timestamp: Date.now(),
     //             });
-    //             console.log(`📢 [BE] Sent call-accepted to customer ${receiverId} on socket ${socketId}`);
+    //             console.log(`📞 Incoming call sent to ${receiverId} on socket ${socketId}`);
     //         });
     //     } else {
-    //         console.error(`❌ [BE] Customer ${receiverId} not found in socket map`);
+    //         // Jika kurir offline
+    //         const callerSockets = getReceiverSocketId(callerId);
+    //         if (callerSockets) {
+    //             callerSockets.forEach(socketId => {
+    //                 io.to(socketId).emit('call-failed', {
+    //                     orderId,
+    //                     reason: 'Kurir tidak online'
+    //                 });
+    //             });
+    //         }
     //     }
     // });
 
+    // // socket.on('accept-call', ({ orderId, receiverId }) => {
+    // //     const callerId = userId; // ID kurir yang menerima panggilan
 
-    // Reject call
-    socket.on('reject-call', ({ orderId, callerId, receiverId }) => {
-        // const call = activeCalls[orderId];
-        // if (!call) return;
+    // //     console.log(`Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaccept call for order: ${orderId} from receiver: ${receiverId}`);
+    // //     const callerSockets = getReceiverSocketId(receiverId); // receiverId adalah callerId asli
+    // //     // console.log("Caaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaller Sockets:", callerSockets);
+    // //     if (callerSockets) {
+    // //         callerSockets.forEach(socketId => {
+    // //             io.to(socketId).emit('call-accepted', {
+    // //                 orderId,
+    // //                 callerId, // ID kurir
+    // //                 receiverId // ID customer
+    // //             });
+    // //         });
+    // //     }
 
-        // console.log(`rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrreject call for order: ${orderId} from caller: ${callerId} to receiver: ${receiverId}`);
+    // // });
+    // // Handle accept-call dengan parameter yang konsisten
+    // socket.on('accept-call', ({ orderId, callerId, receiverId }) => {
+    //     console.log(`📢 [BE] Call accepted for order: ${orderId}`);
+    //     console.log(`📢 [BE] Caller (customer): ${callerId}`);
+    //     console.log(`📢 [BE] Receiver (courier): ${receiverId}`);
 
-        // Notify caller
-        const callerSockets = getReceiverSocketId(callerId);
-        if (callerSockets) {
-            callerSockets.forEach(socketId => {
-                io.to(socketId).emit('call-rejected', { orderId });
-            });
-        }
+    //     // Kirim notifikasi ke semua device customer (caller)
+    //     const callerSockets = getReceiverSocketId(callerId);
+    //     if (callerSockets) {
+    //         callerSockets.forEach(socketId => {
+    //             io.to(socketId).emit('call-accepted', {
+    //                 orderId,
+    //                 callerId: receiverId, // ID kurir (yang menerima)
+    //                 receiverId: callerId // ID customer (yang memulai panggilan)
+    //             });
+    //             console.log(`📢 [BE] Sent call-accepted to customer ${callerId} on socket ${socketId}`);
+    //         });
+    //     } else {
+    //         console.error(`❌ [BE] Customer ${callerId} not found in socket map`);
+    //     }
 
-        // Clean up
-        delete activeCalls[orderId];
-    });
+    //     // Kirim notifikasi ke semua device kurir (receiver)
+    //     const receiverSockets = getReceiverSocketId(receiverId);
+    //     if (receiverSockets) {
+    //         receiverSockets.forEach(socketId => {
+    //             io.to(socketId).emit('call-accepted', {
+    //                 orderId,
+    //                 callerId: receiverId, // ID kurir
+    //                 receiverId: callerId // ID customer
+    //             });
+    //         });
+    //     }
+    // });
 
-    // socket.on('reject-call', ({ orderId, callerId }) => {
-    //     console.log(`Call rejected for order: ${orderId}`);
+    // // socket.on('accept-call', ({ orderId, receiverId }) => {
+    // //     const callerId = userId; // ID kurir yang menerima panggilan
 
-    //     // Kirim notifikasi ke customer
+    // //     console.log(`📢 [BE] Call accepted for order: ${orderId} by courier: ${callerId}, notifying customer: ${receiverId}`);
+
+    // //     // Kirim ke semua device customer (caller)
+    // //     const callerSockets = getReceiverSocketId(receiverId);
+    // //     if (callerSockets) {
+    // //         callerSockets.forEach(socketId => {
+    // //             io.to(socketId).emit('call-accepted', {
+    // //                 orderId,
+    // //                 callerId, // ID kurir
+    // //                 receiverId: receiverId // ID customer
+    // //             });
+    // //             console.log(`📢 [BE] Sent call-accepted to customer ${receiverId} on socket ${socketId}`);
+    // //         });
+    // //     } else {
+    // //         console.error(`❌ [BE] Customer ${receiverId} not found in socket map`);
+    // //     }
+    // // });
+
+
+    // // Reject call
+    // socket.on('reject-call', ({ orderId, callerId, receiverId }) => {
+    //     // const call = activeCalls[orderId];
+    //     // if (!call) return;
+
+    //     // console.log(`rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrreject call for order: ${orderId} from caller: ${callerId} to receiver: ${receiverId}`);
+
+    //     // Notify caller
     //     const callerSockets = getReceiverSocketId(callerId);
     //     if (callerSockets) {
     //         callerSockets.forEach(socketId => {
@@ -788,30 +876,45 @@ io.on("connection", async(socket) => {
     //         });
     //     }
 
-    //     // Hapus dari active calls jika perlu
+    //     // Clean up
     //     delete activeCalls[orderId];
     // });
 
-    // End call
-    socket.on('end-call', ({ orderId, callerId, receiverId }) => {
-        // console.log(`Eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeending call for order: ${orderId}`);
+    // // socket.on('reject-call', ({ orderId, callerId }) => {
+    // //     console.log(`Call rejected for order: ${orderId}`);
 
-        // Notify caller
-        const callerSockets = getReceiverSocketId(callerId);
-        if (callerSockets) {
-            callerSockets.forEach(socketId => {
-                io.to(socketId).emit('call-ended', { orderId });
-            });
-        }
+    // //     // Kirim notifikasi ke customer
+    // //     const callerSockets = getReceiverSocketId(callerId);
+    // //     if (callerSockets) {
+    // //         callerSockets.forEach(socketId => {
+    // //             io.to(socketId).emit('call-rejected', { orderId });
+    // //         });
+    // //     }
 
-        // Notify receiver
-        const receiverSockets = getReceiverSocketId(receiverId);
-        if (receiverSockets) {
-            receiverSockets.forEach(socketId => {
-                io.to(socketId).emit('call-ended', { orderId });
-            });
-        }
-    });
+    // //     // Hapus dari active calls jika perlu
+    // //     delete activeCalls[orderId];
+    // // });
+
+    // // End call
+    // socket.on('end-call', ({ orderId, callerId, receiverId }) => {
+    //     // console.log(`Eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeending call for order: ${orderId}`);
+
+    //     // Notify caller
+    //     const callerSockets = getReceiverSocketId(callerId);
+    //     if (callerSockets) {
+    //         callerSockets.forEach(socketId => {
+    //             io.to(socketId).emit('call-ended', { orderId });
+    //         });
+    //     }
+
+    //     // Notify receiver
+    //     const receiverSockets = getReceiverSocketId(receiverId);
+    //     if (receiverSockets) {
+    //         receiverSockets.forEach(socketId => {
+    //             io.to(socketId).emit('call-ended', { orderId });
+    //         });
+    //     }
+    // });
 
     // WebRTC signaling
     // socket.on('webrtc-offer', ({ orderId, offer, receiverId }) => {
@@ -844,19 +947,19 @@ io.on("connection", async(socket) => {
 
 
     // Handle WebRTC signaling
-    socket.on('webrtc-offer', ({ orderId, offer, senderId, receiverId }) => {
-        const receiverSockets = getReceiverSocketId(receiverId);
-        console.log("ooooooooooooooooooooffer iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiini receiverSockets webrtc offer:", receiverSockets);
-        if (receiverSockets) {
-            receiverSockets.forEach(socketId => {
-                io.to(socketId).emit('webrtc-offer', {
-                    orderId,
-                    offer,
-                    senderId
-                });
-            });
-        }
-    });
+    // socket.on('webrtc-offer', ({ orderId, offer, senderId, receiverId }) => {
+    //     const receiverSockets = getReceiverSocketId(receiverId);
+    //     console.log("ooooooooooooooooooooffer iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiini receiverSockets webrtc offer:", receiverSockets);
+    //     if (receiverSockets) {
+    //         receiverSockets.forEach(socketId => {
+    //             io.to(socketId).emit('webrtc-offer', {
+    //                 orderId,
+    //                 offer,
+    //                 senderId
+    //             });
+    //         });
+    //     }
+    // });
 
     socket.on('webrtc-answer', ({ orderId, answer, senderId, receiverId }) => {
         const receiverSockets = getReceiverSocketId(receiverId);
