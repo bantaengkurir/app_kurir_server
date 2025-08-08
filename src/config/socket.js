@@ -183,7 +183,10 @@ const io = new Server(server, {
 });
 
 const userSocketMap = {};
-const onlineUsers = new Map(); // Map<userId, socketId>
+// const onlineUsers = new Map(); // Map<userId, socketId>
+// 🟢 Store online users and active calls
+let onlineUsers = []; // Array to store online users
+// const activeCalls = new Map(); // Map to track ongoing calls
 
 
 // function getReceiverSocketId(userId) {
@@ -212,10 +215,40 @@ function getOnlineUsers() {
     return Object.keys(userSocketMap);
 }
 
-const activeCalls = {};
+// const activeCalls = {};
+const activeCalls = new Map(); // Map to track ongoing calls
 
 io.on("connection", async(socket) => {
     console.log("A user connected", socket.id);
+    // ! ini yang baru
+    // 🔹 Emit an event to send the socket ID to the connected user
+    socket.emit("me", socket.id);
+
+    // 📡 User joins the chat system
+    socket.on("join", (user) => {
+        if (!user || !user.id) {
+            console.warn("[WARNING] Invalid user data on join"); // Warn if user data is missing
+            return;
+        }
+
+        socket.join(user.id); // 🔹 Add user to a room with their ID
+        const existingUser = onlineUsers.find((u) => u.userId === user.id); // Check if user is already online
+
+        if (existingUser) {
+            existingUser.socketId = socket.id; // Update socket ID if user reconnects
+        } else {
+            // 🟢 Add new user to online users list
+            onlineUsers.push({
+                userId: user.id,
+                name: user.name,
+                socketId: socket.id,
+            });
+        }
+
+        io.emit("online-users", onlineUsers); // 🔹 Broadcast updated online users list
+    });
+
+    // !sampai disini yang barunya
 
     const userId = socket.handshake.query.userId;
     if (userId) {
@@ -646,101 +679,70 @@ io.on("connection", async(socket) => {
 
     // Di dalam io.on("connection", ...)
 
-    // Initiate call
-    socket.on('initiate-call', async ({ orderId, callerId, receiverId, signalData }) => {
-  console.log(`Iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiincoming call from ${callerId} to ${receiverId}`);
-  
-  const caller = await UserModel.findByPk(callerId);
-  const receiverSockets = getReceiverSocketId(receiverId);
-  
-  if (receiverSockets?.length) {
-    receiverSockets.forEach(socketId => {
-      io.to(socketId).emit('callToUser', {
-        orderId,
-        from: callerId,
-        name: caller.username,
-        email: caller.email,
-        profile_image: caller.profile_image,
-        signalData // Kirim signalData ke client penerima
-      });
-    });
-        } else {
-            // Jika penerima offline
-            const callerSockets = getReceiverSocketId(callerId);
-            if (callerSockets) {
-                callerSockets.forEach(socketId => {
-                    io.to(socketId).emit('userUnavailable', {
-                        message: 'User tidak online'
-                    });
-                });
-            }
+
+    // 📞 Handle outgoing call request
+    socket.on("callToUser", (data) => {
+        const callee = onlineUsers.find((user) => user.userId === data.callToUserId); // Find the user being called
+
+        if (!callee) {
+            socket.emit("userUnavailable", { message: "User is offline." }); // ❌ Notify caller if user is offline
+            return;
         }
-    });
 
-    socket.on('webrtc-offer', ({ orderId, offer, receiverId }) => {
-  const receiverSockets = getReceiverSocketId(receiverId);
-  receiverSockets?.forEach(socketId => {
-    io.to(socketId).emit('webrtc-offer', { 
-      orderId,
-      offer,
-      senderId: socket.userId 
-    });
-  });
-});
+        // 🚫 If the user is already in another call
+        if (activeCalls.has(data.callToUserId)) {
+            socket.emit("userBusy", { message: "User is currently in another call." });
 
-    // Handle call acceptance
-    socket.on('accept-call', async({ orderId, callerId, receiverId }) => {
-        const receiver = await UserModel.findByPk(receiverId);
-
-        const callerSockets = getReceiverSocketId(callerId);
-        if (callerSockets) {
-            callerSockets.forEach(socketId => {
-                io.to(socketId).emit('callAccepted', {
-                    from: receiverId,
-                    name: receiver.username,
-                    profile_image: receiver.profile_image
-                });
+            io.to(callee.socketId).emit("incomingCallWhileBusy", {
+                from: data.from,
+                name: data.name,
+                email: data.email,
+                profilepic: data.profilepic,
             });
+
+            return;
         }
-    });
 
-    // Handle call rejection
-    socket.on('reject-call', async({ callerId, receiverId }) => {
-        const receiver = await UserModel.findByPk(receiverId);
-
-        const callerSockets = getReceiverSocketId(callerId);
-        if (callerSockets) {
-            callerSockets.forEach(socketId => {
-                io.to(socketId).emit('callRejected', {
-                    from: receiverId,
-                    name: receiver.username,
-                    profile_image: receiver.profile_image
-                });
-            });
-        }
-    });
-
-    // Handle call ending
-    socket.on('end-call', ({ callerId, receiverId }) => {
-        [callerId, receiverId].forEach(userId => {
-            const sockets = getReceiverSocketId(userId);
-            if (sockets) {
-                sockets.forEach(socketId => {
-                    io.to(socketId).emit('callEnded', {
-                        message: 'Panggilan diakhiri'
-                    });
-                });
-            }
+        // 📞 Emit an event to the receiver's socket (callee)
+        io.to(callee.socketId).emit("callToUser", {
+            signal: data.signalData, // WebRTC signal data
+            from: data.from, // Caller ID
+            name: data.name, // Caller name
+            email: data.email, // Caller email
+            profilepic: data.profilepic, // Caller profile picture
         });
     });
 
+    // 📞 Handle when a call is accepted
+    socket.on("answeredCall", (data) => {
+        io.to(data.to).emit("callAccepted", {
+            signal: data.signal, // WebRTC signal
+            from: data.from, // Caller ID
+        });
 
+        // 📌 Track active calls in a Map
+        activeCalls.set(data.from, { with: data.to, socketId: socket.id });
+        activeCalls.set(data.to, { with: data.from, socketId: data.to });
+    });
 
+    // ❌ Handle call rejection
+    socket.on("reject-call", (data) => {
+        io.to(data.to).emit("callRejected", {
+            name: data.name, // Rejected user's name
+            profilepic: data.profilepic // Rejected user's profile picture
+        });
+    });
 
+    // 📴 Handle call ending
+    socket.on("call-ended", (data) => {
+        io.to(data.to).emit("callEnded", {
+            name: data.name, // User who ended the call
+        });
 
-
-
-
+        // 🔥 Remove call from active calls
+        activeCalls.delete(data.from);
+        activeCalls.delete(data.to);
+    });
 
 
 
@@ -1046,6 +1048,7 @@ io.on("connection", async(socket) => {
     // Kirim daftar pengguna online
     io.emit("getOnlineUsers", getOnlineUsers());
 
+
     socket.on("disconnect", async() => {
         console.log("A user disconnected", socket.id);
 
@@ -1071,6 +1074,29 @@ io.on("connection", async(socket) => {
                 if (socket.locationInterval) {
                     clearInterval(socket.locationInterval);
                 }
+                // !ini tambahan
+                const user = onlineUsers.find((u) => u.socketId === socket.id); // Find the disconnected user
+                if (user) {
+                    activeCalls.delete(user.userId); // Remove the user from active calls
+
+                    // 🔥 Remove all calls associated with this user
+                    for (const [key, value] of activeCalls.entries()) {
+                        if (value.with === user.userId) activeCalls.delete(key);
+                    }
+                }
+
+                // 🔥 Remove user from the online users list
+                onlineUsers = onlineUsers.filter((user) => user.socketId !== socket.id);
+
+                // 🔹 Broadcast updated online users list
+                io.emit("online-users", onlineUsers);
+
+                // 🔹 Notify others that the user has disconnected
+                socket.broadcast.emit("discounnectUser", { disUser: socket.id });
+
+                console.log(`[INFO] Disconnected: ${socket.id}`); // Debugging: User disconnected
+
+                // !terakhir dari tambahan
             } catch (error) {
                 console.error("Error updating user status to offline:", error);
             }
@@ -1081,9 +1107,3 @@ io.on("connection", async(socket) => {
 });
 
 module.exports = { io, app, server, getReceiverSocketId, getOnlineUsers };
-
-
-
-
-
-// ! yang diperbaiki karena setelah direfresh data messagesnya hilang
