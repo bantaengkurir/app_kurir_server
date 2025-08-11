@@ -570,7 +570,7 @@ const loginWeb = async(req, res) => {
         }
 
 
-        // Jika perangkat baru
+        // // Jika perangkat baru
         if (user.last_login_device !== currentDevice && user.role == 'courier') {
             // Generate kode verifikasi
             const verificationCode = generateVerificationCode();

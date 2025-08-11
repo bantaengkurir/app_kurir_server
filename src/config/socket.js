@@ -727,6 +727,7 @@ io.on("connection", async(socket) => {
 
     // ❌ Handle call rejection
     socket.on("reject-call", (data) => {
+        console.log("rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrreject call", data)
         io.to(data.to).emit("callRejected", {
             name: data.name, // Rejected user's name
             profilepic: data.profilepic // Rejected user's profile picture
