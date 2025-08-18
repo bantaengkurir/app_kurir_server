@@ -1,6 +1,48 @@
-const { where } = require("sequelize");
+const { Op } = require("sequelize");
+const bcrypt = require("bcryptjs");
+const crypto = require('crypto');
+const jwt = require("jsonwebtoken");
 const { user: UserModel, product: ProductModel, order: OrderModel, shipping_cost: ShippingModel, payment: PaymentModel, courier_earning: Courier_earningModel, courier: CourierModel } = require("../models");
+const { axios } = require("axios");
+const nodemailer = require("nodemailer");
 
+
+const sendVerificationEmail = async(email) => {
+    const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+            user: process.env.GMAIL_USER,
+            pass: process.env.GMAIL_PASSWORD,
+        },
+        tls: {
+            rejectUnauthorized: false, // Abaikan validasi sertifikat
+        },
+    });
+
+    const mailOptions = {
+        from: process.env.GMAIL_USER,
+        to: email,
+        subject: "Verify Your Password Reset",
+        text: `Your verification link: ${process.env.APP_URL}/verify?email=${email}`,
+    };
+
+    await transporter.sendMail(mailOptions);
+};
+
+const reverseGeocode = async(latitude, longitude) => {
+    const apiKey = process.env.API_KEY_GEOCODING_MAPS;
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}`;
+    try {
+        const response = await axios.get(url);
+        if (response.data.results.length > 0) {
+            return response.data.results[0].formatted_address;
+        }
+        throw new Error('Alamat tidak ditemukan');
+    } catch (error) {
+        console.error('Error reverse geocoding:', error.response ? error.response.data : error.message);
+        throw new Error('Terjadi kesalahan saat mengambil alamat');
+    }
+};
 
 /**
  * @param {import("express").Request} req
@@ -161,11 +203,11 @@ const showUsers = async(req, res, next) => {
     try {
         const { id } = req.params;
 
-        if (req.user.role !== "admin") {
-            return res.status(403).send({
-                message: "Forbidden: You are not allowed to access this resource.",
-            });
-        }
+        // if (req.user.role !== "admin") {
+        //     return res.status(403).send({
+        //         message: "Forbidden: You are not allowed to access this resource.",
+        //     });
+        // }
 
         // Cari user tanpa include untuk menentukan role
         const user = await UserModel.findByPk(id, {
@@ -430,6 +472,232 @@ const serviceFcm = async(req, res) => {
         res.status(500).json({ error: 'Gagal menyimpan token' });
     }
 }
+const update = async(req, res, _next) => {
+    try {
+        const currentUser = req.user;
+        const { productId } = req.params;
+        const image = req.file ? req.file.path : null; // Menjadi null jika tidak ada file
+        const { name, description, image_url, price, stock, category } = req.body;
+
+
+        // Memastikan productId tidak undefined
+        if (!productId) {
+            return res.status(400).send({ message: "Product ID tidak ditemukan" });
+        }
+
+        // Memastikan hanya seller yang dapat memperbarui produk
+        // if (currentUser.role !== 'seller') {
+        //     return res.status(403).send({ message: "Hanya seller yang dapat memperbarui produk" });
+        // }
+        // Perbaikan logika pengecekan role
+        if (currentUser.role !== 'seller' && currentUser.role !== 'admin') {
+            return res.status(403).send({ message: "Hanya seller atau admin yang dapat menambahkan produk" });
+        }
+
+
+        // Memastikan produk milik seller yang sedang login
+        const product = await ProductModel.findOne({
+            where: {
+                id: productId,
+            },
+        });
+
+        if (!product) {
+            return res.status(404).send({ message: "Produk tidak ditemukan atau Anda tidak memiliki izin untuk memperbaruinya" });
+        }
+
+        // Memvalidasi inputan dari user
+        if (!name || !description || !stock) {
+            return res.status(400).send({ message: "Tidak ada data yang diperbarui" });
+        }
+
+        // Update produk
+        const updatedProduct = await product.update({
+            name,
+            image_url: image || image_url || product.image_url,
+            description,
+            price,
+            stock,
+            category,
+        });
+
+        return res.send({
+            message: "Product updated successfully",
+            data: updatedProduct,
+        });
+    } catch (error) {
+        if (error instanceof multer.MulterError) {
+            // Tangani error Multer
+            return res.status(400).json({ message: error.message });
+        } else if (error.message === "File harus berupa gambar!") {
+            return res.status(400).json({ message: error.message });
+        } else {
+            // Error lainnya
+            console.error("Error:", error.message); // Hanya untuk debugging
+            return res.status(500).json({ message: "Internal server error" });
+        }
+    }
+};
+const updateUser = async(req, res, _next) => {
+    try {
+        const { userId } = req.params;
+        const image = req.file ? req.file.path : null;
+        const currentUser = req.user;
+
+        if (!userId) {
+            return res.status(400).send({ message: "User ID tidak ditemukan" });
+        }
+
+        // if (currentUser.id !== userId) {
+        //     return res.status(403).json({ message: "Unauthorized: Anda hanya bisa mengupdate profil sendiri" });
+        // }
+        const {
+            name,
+            address,
+            latitude,
+            longitude,
+            phone_number,
+            gender,
+            date_of_birth
+        } = req.body;
+
+
+
+        const userExist = await UserModel.findOne({ where: { id: userId } });
+        if (!userExist) {
+            return res.status(401).json({ message: "User tidak ditemukan" });
+        }
+        // const address = await reverseGeocode(latitude, longitude);
+
+        const updatedProfile = await UserModel.update({
+            name,
+            address,
+            latitude,
+            longitude,
+            profile_image: image,
+            phone_number,
+            gender,
+            date_of_birth
+        }, {
+            where: { id: userId }
+        });
+
+        // Ambil data user yang sudah diupdate
+        // const updatedUser = await UserModel.findOne({
+        //     where: { id },
+        //     attributes: { exclude: ['password'] } // Hindari mengembalikan password
+        // });
+
+        return res.send({
+            message: "Update successfully",
+            data: updatedProfile, // Kirim data user yang sudah diupdate
+        });
+
+    } catch (error) {
+        console.error("Error:", error);
+        return res.status(500).send({ message: "Internal Server Error" });
+    }
+};
+const resetPasswordLink = async(req, res, _next) => {
+    const { email } = req.body;
+
+    try {
+        const user = await UserModel.findOne({ where: { email } });
+        if (!user) {
+            return res.status(404).json({
+                message: 'Email tidak ditemukan'
+            });
+        }
+
+        if (user.provider !== "local") {
+            return res.status(403).json({
+                message: "Anda menggunakan login dengan akun Google, tidak bisa melakukan reset password"
+            })
+        }
+
+        // Generate token dan waktu kedaluwarsa
+        const token = crypto.randomBytes(20).toString('hex');
+        const expires = new Date();
+        expires.setMinutes(expires.getMinutes() + 5); // 5 menit
+
+        await user.update({
+            reset_password_token: token,
+            reset_password_expires: expires
+        });
+
+        // Kirim email
+        const transporter = nodemailer.createTransport({
+            service: "gmail",
+            auth: {
+                user: process.env.GMAIL_USER,
+                pass: process.env.GMAIL_PASSWORD,
+            },
+            tls: {
+                rejectUnauthorized: false,
+            },
+        });
+
+        const mailOptions = {
+            from: process.env.GMAIL_USER,
+            to: email,
+            subject: "Reset Password",
+            html: `<p>Silakan klik link berikut untuk reset password (berlaku 5 menit):</p>
+             <a href="${process.env.CLIENT_URL}/reset-password?token=${token}">
+               Reset Password
+             </a>`
+        };
+
+        await transporter.sendMail(mailOptions);
+        res.status(200).json({ message: 'Link reset password telah dikirim', token });
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+}
+
+const resetPassword = async(req, res, _next) => {
+    const { token, password } = req.body;
+
+    try {
+        // Cari user berdasarkan token
+        const user = await UserModel.findOne({
+            where: {
+                reset_password_token: token,
+                // reset_password_expires: {
+                //     [Op.gt]: new Date()
+                // } // Cek masa berlaku
+            }
+        });
+
+
+        if (!user) {
+            return res.status(400).json({
+                message: 'Token tidak valid atau sudah kedaluwarsa'
+            });
+        }
+
+        // Validasi password
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,}$/;
+        if (!passwordRegex.test(password)) {
+            return res.status(400).json({
+                message: "Password harus mengandung minimal 8 karakter, huruf besar, kecil, angka, dan simbol"
+            });
+        }
+
+        // Update password dan reset token
+        const hashedPassword = await bcrypt.hash(password, 10);
+        await user.update({
+            password: hashedPassword,
+            reset_password_token: null,
+            reset_password_expires: null
+        });
+
+        res.status(200).json({ message: 'Password berhasil direset' });
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
 
 module.exports = {
     indexUser,
@@ -441,5 +709,8 @@ module.exports = {
     createCourier,
     showCourier,
     updateCourier,
+    resetPassword,
+    resetPasswordLink,
+    updateUser,
     serviceFcm
 };

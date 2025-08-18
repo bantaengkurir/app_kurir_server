@@ -22,6 +22,10 @@ module.exports = {
                 type: Sequelize.ENUM('admin', 'seller', 'courier', 'customer'),
                 defaultValue: 'customer'
             },
+            provider: {
+                type: Sequelize.ENUM('local', 'google', 'facebook', 'github'),
+                defaultValue: 'local'
+            },
             address: {
                 type: Sequelize.TEXT
             },
@@ -62,6 +66,14 @@ module.exports = {
             },
             fcm_token: {
                 type: Sequelize.TEXT,
+                allowNull: true
+            },
+            reset_password_token: {
+                type: DataTypes.TEXT,
+                allowNull: true
+            },
+            reset_password_expires: {
+                type: DataTypes.DATE,
                 allowNull: true
             },
             created_at: {

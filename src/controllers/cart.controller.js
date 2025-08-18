@@ -7,9 +7,17 @@ const { user: UserModel, cart: CartModel, product: ProductModel, variant: Varian
  */
 const index = async(req, res, _next) => {
     try {
+
+        console.log('Rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrreq User:', req.user); // <<< Log ini penting
+
+        // Dapatkan user ID dengan cara yang lebih fleksibel
+        const userId = req.user.id;
+        if (!userId) {
+            return res.status(400).send({ message: "User ID not found" });
+        }
         const cart = await CartModel.findAll({
             where: {
-                user_id: req.user.id,
+                user_id: userId,
             },
             attributes: ["id", "variant_id", "quantity"],
             include: [{
@@ -27,6 +35,7 @@ const index = async(req, res, _next) => {
                     // attributes: ["id", "name", "description", "price", "stock", "img_url"],
             }]
         });
+        console.log("ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccart", req.user);
 
         return res.send({
             message: "Success",

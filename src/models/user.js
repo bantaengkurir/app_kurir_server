@@ -94,6 +94,7 @@ module.exports = (sequelize, DataTypes) => {
         email: DataTypes.STRING,
         password: DataTypes.STRING,
         role: DataTypes.ENUM('admin', 'seller', 'courier', 'customer'),
+        provider: DataTypes.ENUM('local', 'google', 'facebook', 'github'),
         address: DataTypes.TEXT,
         latitude: DataTypes.DECIMAL,
         longitude: DataTypes.DECIMAL,
@@ -107,6 +108,8 @@ module.exports = (sequelize, DataTypes) => {
         status: DataTypes.STRING,
         refresh_token: DataTypes.STRING,
         fcm_token: DataTypes.TEXT,
+        reset_password_token: DataTypes.TEXT,
+        reset_password_expires: DataTypes.DATE,
     }, {
         sequelize,
         modelName: 'user',

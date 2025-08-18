@@ -571,19 +571,19 @@ const loginWeb = async(req, res) => {
 
 
         // // Jika perangkat baru
-        if (user.last_login_device !== currentDevice && user.role == 'courier') {
-            // Generate kode verifikasi
-            const verificationCode = generateVerificationCode();
-            user.verification_code = verificationCode;
-            await user.save();
+        // if (user.last_login_device !== currentDevice && user.role == 'courier') {
+        //     // Generate kode verifikasi
+        //     const verificationCode = generateVerificationCode();
+        //     user.verification_code = verificationCode;
+        //     await user.save();
 
-            // Kirim email verifikasi
-            await sendVerificationEmail(user.email, verificationCode);
+        //     // Kirim email verifikasi
+        //     await sendVerificationEmail(user.email, verificationCode);
 
-            return res.status(403).json({
-                message: "New device detected. Please verify the code sent to your email.",
-            });
-        }
+        //     return res.status(403).json({
+        //         message: "New device detected. Please verify the code sent to your email.",
+        //     });
+        // }
 
         // Login sukses, update perangkat terakhir
         user.last_login_device = currentDevice;
@@ -631,6 +631,37 @@ const loginWeb = async(req, res) => {
     }
 
 
+};
+
+const googleLogin = async(req, res) => {
+    // Jika user sudah login melalui Passport
+    if (req.user) {
+        const user = req.user;
+
+        const data = {
+            id: user.id,
+            username: user.name,
+            email: user.email,
+            profile_image: user.profile_image,
+            role: user.role,
+        };
+
+        const token = jwt.sign(data, process.env.JWT_SECRET, { expiresIn: '7d' });
+        const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
+
+        // Simpan refresh token di database
+        await UserModel.update({ refresh_token: refreshToken }, { where: { id: user.id } });
+
+        return res.json({
+            success: true,
+            data: { token, refreshToken, user: data },
+        });
+    } else {
+        return res.status(401).json({
+            success: false,
+            message: 'Google authentication failed',
+        });
+    }
 };
 
 
@@ -1017,5 +1048,6 @@ module.exports = {
     logoutUser,
     logoutUserWeb,
     resendEmail,
-    refreshToken
+    refreshToken,
+    googleLogin
 };
